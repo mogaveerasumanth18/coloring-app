@@ -1,0 +1,68 @@
+{
+  "cli": {
+    "version": ">= 3.8.1",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "production": {
+      "channel": "production",
+      "distribution": "store",
+      "pnpm": "9.12.3",
+      "ios": {
+        "image": "latest"
+      },
+      "android": {
+        "buildType": "apk",
+        "image": "latest"
+      },
+      "env": {
+        "EXPO_NO_DOTENV": "1",
+        "APP_ENV": "production",
+        "FLIPPER_DISABLE": "1"
+      },
+      "prebuildCommand": "pnpm expo install --fix"
+    },
+    "simple": {
+      "distribution": "internal",
+      "pnpm": "9.12.3",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "staging": {
+      "channel": "staging",
+      "distribution": "internal",
+      "pnpm": "9.12.3",
+      "ios": {
+        "image": "latest"
+      },
+      "android": {
+        "buildType": "apk",
+        "image": "latest"
+      },
+      "env": {
+        "APP_ENV": "staging",
+        "EXPO_NO_DOTENV": "1",
+        "FLIPPER_DISABLE": "1"
+      }
+    },
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "pnpm": "9.12.3",
+      "ios": {
+        "image": "latest"
+      },
+      "android": {
+        "image": "latest"
+      },
+      "env": {
+        "APP_ENV": "development",
+        "EXPO_NO_DOTENV": "1"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
