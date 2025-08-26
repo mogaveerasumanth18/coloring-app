@@ -2,11 +2,9 @@ name: Build APK
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -18,8 +16,8 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: 17
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -32,7 +30,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: 8.6   # 👈 pinned to match Expo SDK 51/React Native 0.76
+          gradle-version: 8.9   # 👈 required for Expo SDK 53
 
       - name: Clean Gradle cache
         run: gradle clean
