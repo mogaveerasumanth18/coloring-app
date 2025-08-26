@@ -23,12 +23,20 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18   # or 16 depending on your Expo/React Native version
+
+      - name: Install JS dependencies
+        run: npm install
+
       - name: Set up Gradle
         uses: gradle/gradle-build-action@v2
 
       - name: Build APK
         run: gradle assembleDebug
-        working-directory: android   # 👈 Important: run inside android/
+        working-directory: android
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
