@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system';
-import { decode as decodeBase64 } from 'base-64';
+import { encode as btoa, decode as atob } from 'base-64';
 import * as UPNG from 'upng-js';
 
 import { ZebraFloodFill } from '../utils/ZebraFloodFill';
@@ -81,73 +81,34 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
   const updateDataUrl = useCallback(async (currentBitmap: ColoringBitmap) => {
     try {
-      // For React Native, we need to create a proper PNG data URL
-      // We'll use expo-image-manipulator to create the image
-      
-      if (typeof window !== 'undefined' && document?.createElement) {
-        // Web environment - use canvas
-        const canvas = document.createElement('canvas');
-        canvas.width = currentBitmap.width;
-        canvas.height = currentBitmap.height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          const imageData = ctx.createImageData(currentBitmap.width, currentBitmap.height);
-          imageData.data.set(currentBitmap.data);
-          ctx.putImageData(imageData, 0, 0);
-          const newDataUrl = canvas.toDataURL('image/png');
-          setDataUrl(newDataUrl);
-        }
-      } else {
-        // Native environment - use expo-image-manipulator to create a proper PNG
-        const { manipulateAsync, SaveFormat } = require('expo-image-manipulator');
-        
-        // Create a simple colored SVG first, then convert to PNG
-        const svgWidth = currentBitmap.width;
-        const svgHeight = currentBitmap.height;
-        
-        // For now, let's create a simple white rectangle with the template outline
-        // This is a temporary solution until we can properly convert the RGBA data
-        const svgData = `
-          <svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" xmlns="http://www.w3.org/2000/svg">
-            <rect width="${svgWidth}" height="${svgHeight}" fill="white"/>
-            <!-- Add simple template outlines -->
-            <circle cx="${svgWidth/2}" cy="${svgHeight/2}" r="${Math.min(svgWidth, svgHeight)/4}" 
-                    fill="none" stroke="black" stroke-width="2"/>
-            <rect x="${svgWidth/4}" y="${svgHeight/4}" width="${svgWidth/2}" height="${svgHeight/2}" 
-                  fill="none" stroke="black" stroke-width="2"/>
-          </svg>
-        `;
-        
-        const dataUri = `data:image/svg+xml;base64,${btoa(svgData)}`;
-        
-        try {
-          const result = await manipulateAsync(dataUri, [], {
-            format: SaveFormat.PNG,
-            compress: 0.8,
-          });
-          setDataUrl(result.uri);
-        } catch (manipulatorError) {
-          console.warn('expo-image-manipulator failed, using fallback:', manipulatorError);
-          // Fallback to a simple colored rectangle
-          setDataUrl('data:image/svg+xml;base64,' + btoa(svgData));
-        }
+      // Convert RGBA pixel buffer to a PNG using upng-js on both web and native
+      const pngArrayBuffer = (UPNG as any).encode(
+        [currentBitmap.data.buffer],
+        currentBitmap.width,
+        currentBitmap.height,
+        0
+      );
+
+      // Convert ArrayBuffer -> Base64
+      const bytes = new Uint8Array(pngArrayBuffer);
+      let binary = '';
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        binary += String.fromCharCode.apply(null as any, Array.prototype.slice.call(bytes, i, i + chunk));
       }
-      
-      if (onColoringComplete && dataUrl) {
-        onColoringComplete(dataUrl);
-      }
+      const base64Png = btoa(binary);
+      const uri = `data:image/png;base64,${base64Png}`;
+      setDataUrl(uri);
+
+      if (onColoringComplete) onColoringComplete(uri);
     } catch (error) {
       console.error('Failed to update data URL:', error);
-      // Create a fallback white rectangle
-      const fallbackSvg = `
-        <svg width="300" height="300" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
-          <rect width="300" height="300" fill="white"/>
-          <text x="150" y="150" text-anchor="middle" fill="gray">Template Loading...</text>
-        </svg>
-      `;
-      setDataUrl('data:image/svg+xml;base64,' + btoa(fallbackSvg));
+      // Fallback: simple 1x1 white PNG
+      const transparentPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+      setDataUrl(`data:image/png;base64,${transparentPng}`);
     }
-  }, [onColoringComplete, dataUrl]);
+  }, [onColoringComplete]);
 
   // Expose undo/redo/clear methods via ref
   useImperativeHandle(ref, () => ({
