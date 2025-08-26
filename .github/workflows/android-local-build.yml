@@ -1,3 +1,14 @@
+name: Build APK
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,7 +32,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: 8.6   # ✅ compatible with Expo SDK 51
+          gradle-version: 8.6   # 👈 pinned to match Expo SDK 51/React Native 0.76
 
       - name: Clean Gradle cache
         run: gradle clean
