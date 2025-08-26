@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   Dimensions,
   PanResponder,
@@ -33,7 +33,7 @@ const DEFAULT_CANVAS_SIZE = Math.min(SCREEN_WIDTH - 40, 400);
  *
  * Uses HTML5 Canvas for web compatibility and proper pixel manipulation
  */
-export const ZebraCanvas: React.FC<ZebraCanvasProps> = ({
+export const ZebraCanvas = React.forwardRef<any, ZebraCanvasProps>(({
   templateUri,
   selectedColor = '#FF6B6B',
   selectedTool = 'bucket',
@@ -41,11 +41,24 @@ export const ZebraCanvas: React.FC<ZebraCanvasProps> = ({
   width = DEFAULT_CANVAS_SIZE,
   height = DEFAULT_CANVAS_SIZE,
   onColoringComplete,
-}) => {
+}, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [currentPath, setCurrentPath] = useState<Point[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
+
+  // For native platforms, we'll provide stub methods
+  useImperativeHandle(ref, () => ({
+    undo: () => {
+      console.log('Undo not implemented for native ZebraCanvas');
+    },
+    redo: () => {
+      console.log('Redo not implemented for native ZebraCanvas');  
+    },
+    save: () => {
+      console.log('Save not implemented for native ZebraCanvas');
+    }
+  }));
 
   // Initialize canvas with template
   useEffect(() => {
@@ -320,7 +333,7 @@ export const ZebraCanvas: React.FC<ZebraCanvasProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

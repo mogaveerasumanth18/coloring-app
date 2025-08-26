@@ -1,7 +1,6 @@
 /* eslint-disable react/no-unstable-nested-components */
 import { Redirect, SplashScreen } from 'expo-router';
 import React, { useCallback, useEffect } from 'react';
-import { SafeAreaView } from 'react-native';
 
 import IntegratedColoringBookApp from '@/components/IntegratedColoringBookApp';
 import { useAuth, useIsFirstTime } from '@/lib';
@@ -28,9 +27,5 @@ export default function MainLayout() {
     return <Redirect href="/login" />;
   }
   
-  return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <IntegratedColoringBookApp />
-    </SafeAreaView>
-  );
+  return <IntegratedColoringBookApp />;
 }

@@ -2,11 +2,20 @@
 echo Building APK locally...
 echo.
 
-echo Step 1: Prebuild (generates native code)
+echo Step 1: Generate keystore (if needed)
+if not exist "android\app\debug.keystore" (
+    echo Keystore not found. Generating...
+    call generate-keystore.bat
+) else (
+    echo Keystore exists, skipping generation.
+)
+
+echo.
+echo Step 2: Prebuild (generates native code)
 call npx expo prebuild --platform android
 
 echo.
-echo Step 2: Building release APK
+echo Step 3: Building release APK
 cd android
 call gradlew assembleRelease
 

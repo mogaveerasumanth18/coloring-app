@@ -1,17 +1,8 @@
-import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  PanResponder,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-
+import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { View, Text, Image, StyleSheet, Dimensions, TouchableOpacity, ActivityIndicator, Alert, PanResponder } from 'react-native';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import UPNG from 'upng-js';
+import { encode as btoa } from 'base-64';
 import {
   type BrushStroke,
   type ColoringBitmap,
@@ -22,6 +13,8 @@ import {
 interface PngColoringCanvasProps {
   pngUri: string;
   selectedColor: string;
+  controlledPaintMode?: 'flood' | 'brush';
+  brushSize?: number;
   onColoringChange?: (bitmap: ColoringBitmap) => void;
   onProgress?: (progress: string) => void;
 }
@@ -30,325 +23,201 @@ type PaintMode = 'flood' | 'brush';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-export const PngColoringCanvas: React.FC<PngColoringCanvasProps> = ({
-  pngUri,
-  selectedColor,
-  onColoringChange,
-  onProgress,
-}) => {
+export const PngColoringCanvas = React.forwardRef<any, PngColoringCanvasProps>((props, ref) => {
+  const { pngUri, selectedColor, controlledPaintMode, brushSize: brushSizeProp, onColoringChange, onProgress } = props;
+
+  const [loading, setLoading] = useState(false);
   const [bitmap, setBitmap] = useState<ColoringBitmap | null>(null);
-  const [displayUri, setDisplayUri] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [canvasSize, setCanvasSize] = useState({ width: 300, height: 300 });
+  const [displayUri, setDisplayUri] = useState<string | null>(null);
+  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [lastSavedHash, setLastSavedHash] = useState<number>(0);
-  const [paintMode, setPaintMode] = useState<PaintMode>('flood');
-  const [brushSize] = useState(8);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const [paintMode, setPaintMode] = useState<PaintMode>(controlledPaintMode ?? 'flood');
+  const [isEraser, setIsEraser] = useState(false);
   const [currentStroke, setCurrentStroke] = useState<TouchPoint[]>([]);
 
-  // Refs for touch handling
-  const touchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const brushSize = brushSizeProp ?? 8;
   const viewRef = useRef<View>(null);
+  const touchTimeoutRef = useRef<any>(null);
   const drawingRef = useRef<boolean>(false);
 
-  // Load PNG image and initialize bitmap
+  // Convert ARGB Uint32Array to PNG data URL for Image source
+  const bitmapToDataUrl = useCallback((bm: ColoringBitmap): string => {
+    const { width, height, pixels } = bm;
+    const rgba = new Uint8Array(width * height * 4);
+    for (let i = 0; i < pixels.length; i++) {
+      const argb = pixels[i] >>> 0;
+      const a = (argb >> 24) & 0xff;
+      const r = (argb >> 16) & 0xff;
+      const g = (argb >> 8) & 0xff;
+      const b = argb & 0xff;
+      const idx = i * 4;
+      rgba[idx] = r; rgba[idx + 1] = g; rgba[idx + 2] = b; rgba[idx + 3] = a;
+    }
+    const png = (UPNG as any).encode([rgba.buffer], width, height, 0);
+    let binary = '';
+    const bytes = new Uint8Array(png);
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      binary += String.fromCharCode.apply(null as any, Array.prototype.slice.call(bytes, i, i + chunk));
+    }
+    const b64 = btoa(binary);
+    return `data:image/png;base64,${b64}`;
+  }, []);
+
+  // keep in sync with parent if provided
+  useEffect(() => { if (controlledPaintMode) setPaintMode(controlledPaintMode); }, [controlledPaintMode]);
+
+  // History (undo/redo)
+  const historyRef = useRef<ColoringBitmap[]>([]);
+  const historyIndexRef = useRef<number>(-1);
+  const cloneBitmap = (bm: ColoringBitmap): ColoringBitmap => ({ width: bm.width, height: bm.height, pixels: new Uint32Array(bm.pixels) });
+  const pushHistory = (bm: ColoringBitmap) => {
+    if (historyIndexRef.current < historyRef.current.length - 1) historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    historyRef.current.push(cloneBitmap(bm));
+    if (historyRef.current.length > 30) historyRef.current.shift();
+    historyIndexRef.current = historyRef.current.length - 1;
+  };
+
+  useImperativeHandle(ref, () => ({
+    undo: () => {
+      if (historyIndexRef.current > 0) {
+        historyIndexRef.current -= 1;
+        const bm = cloneBitmap(historyRef.current[historyIndexRef.current]);
+        setBitmap(bm);
+        setDisplayUri(bitmapToDataUrl(bm));
+        setLastSavedHash(SimpleColoringEngine.hashBitmap(bm));
+        onColoringChange?.(bm);
+      }
+    },
+    redo: () => {
+      if (historyIndexRef.current < historyRef.current.length - 1) {
+        historyIndexRef.current += 1;
+        const bm = cloneBitmap(historyRef.current[historyIndexRef.current]);
+        setBitmap(bm);
+        setDisplayUri(bitmapToDataUrl(bm));
+        setLastSavedHash(SimpleColoringEngine.hashBitmap(bm));
+        onColoringChange?.(bm);
+      }
+    },
+  }));
+
+  // Load and init bitmap
   const initializeBitmap = useCallback(async () => {
     try {
       setLoading(true);
       onProgress?.('Loading PNG image...');
+      if (!pngUri) throw new Error('No PNG URI provided');
 
-      console.log('🖼️ Loading PNG template:', pngUri);
-
-      // Validate the PNG URI first
-      if (!pngUri) {
-        throw new Error('No PNG URI provided');
-      }
-
-      // Test different URI formats for Android APK compatibility
-      let workingUri = pngUri;
-
-      console.log('🔍 Testing PNG URI accessibility...', typeof pngUri, pngUri);
-
-      // Handle different URI formats
-      if (typeof pngUri === 'number' || !isNaN(Number(pngUri))) {
-        // Convert numeric asset ID to URI
-        console.log('🔄 Converting numeric asset ID to URI:', pngUri);
+      let workingUri = pngUri as any;
+      if (typeof pngUri === 'number' || !isNaN(Number(pngUri as any))) {
         const resolved = Image.resolveAssetSource(Number(pngUri));
-        if (resolved && resolved.uri) {
-          workingUri = resolved.uri;
-          console.log('✅ Converted to URI:', workingUri);
-        } else {
-          throw new Error('Failed to resolve numeric asset');
-        }
-      } else {
-        // Use URI as-is for asset://, file://, or http:// URIs
-        workingUri = pngUri;
-        console.log('✅ Using URI directly:', workingUri);
+        if (resolved?.uri) workingUri = resolved.uri; else throw new Error('Failed to resolve numeric asset');
       }
 
-      setDisplayUri(workingUri);
+      const bm = await SimpleColoringEngine.createBitmapFromUri(workingUri);
+      setBitmap(bm);
+      setDisplayUri(bitmapToDataUrl(bm));
+      pushHistory(bm);
 
-      // Create bitmap from the PNG template
-      console.log('🎨 Creating coloring bitmap from template...');
-      const coloringBitmap =
-        await SimpleColoringEngine.createBitmapFromUri(workingUri);
-      setBitmap(coloringBitmap);
-
-      // Set canvas size
       const maxWidth = SCREEN_WIDTH - 40;
       const maxHeight = SCREEN_HEIGHT * 0.6;
-      const aspectRatio = coloringBitmap.width / coloringBitmap.height;
-
-      let canvasWidth, canvasHeight;
-      if (aspectRatio > maxWidth / maxHeight) {
-        canvasWidth = maxWidth;
-        canvasHeight = maxWidth / aspectRatio;
-      } else {
-        canvasHeight = maxHeight;
-        canvasWidth = maxHeight * aspectRatio;
-      }
-
+      const aspectRatio = bm.width / bm.height;
+      let canvasWidth: number; let canvasHeight: number;
+      if (aspectRatio > maxWidth / maxHeight) { canvasWidth = maxWidth; canvasHeight = maxWidth / aspectRatio; }
+      else { canvasHeight = maxHeight; canvasWidth = maxHeight * aspectRatio; }
       setCanvasSize({ width: canvasWidth, height: canvasHeight });
-      setLastSavedHash(SimpleColoringEngine.hashBitmap(coloringBitmap));
-
-      console.log('✅ PNG template loaded successfully with URI:', workingUri);
+      setLastSavedHash(SimpleColoringEngine.hashBitmap(bm));
       onProgress?.('✅ Template ready to color!');
-    } catch (error) {
-      console.error('❌ Failed to initialize PNG template:', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      console.error('Error details:', errorMessage);
-
-      // More detailed error alert
-      Alert.alert(
-        'Template Loading Error',
-        `Failed to load the coloring template.\n\nError: ${errorMessage}\n\nTroubleshooting:\n• Try selecting a different template\n• Check if assets are bundled in APK\n• Ensure stable internet connection\n\nURI attempted: ${pngUri}`,
-        [{ text: 'OK' }]
-      );
-
+    } catch (e: any) {
+      Alert.alert('Template Loading Error', e?.message ?? 'Unknown error');
       onProgress?.('❌ Failed to load template');
     } finally {
       setLoading(false);
     }
-  }, [pngUri, onProgress]);
+  }, [pngUri, bitmapToDataUrl, onProgress]);
 
-  // Initialize bitmap when component mounts or pngUri changes
-  useEffect(() => {
-    if (pngUri) {
-      initializeBitmap();
+  useEffect(() => { if (pngUri) initializeBitmap(); }, [pngUri, initializeBitmap]);
+
+  // Actions
+  const performFloodFill = useCallback(async (touchX: number, touchY: number) => {
+    if (!bitmap) return;
+    try {
+      onProgress?.(`🎨 Filling area with ${selectedColor}...`);
+      const bitmapX = Math.floor((touchX / canvasSize.width) * bitmap.width);
+      const bitmapY = Math.floor((touchY / canvasSize.height) * bitmap.height);
+      const paintPoint = SimpleColoringEngine.findPaintableArea(bitmap, bitmapX, bitmapY);
+      if (!paintPoint) { onProgress?.('❌ Cannot fill this area'); return; }
+      const fillColor = SimpleColoringEngine.hexToArgb(selectedColor);
+      const newBitmap = SimpleColoringEngine.floodFill(bitmap, paintPoint.x, paintPoint.y, fillColor);
+      const newHash = SimpleColoringEngine.hashBitmap(newBitmap);
+      if (newHash === lastSavedHash) { onProgress?.('⚠️ Area already filled with this color'); return; }
+      setBitmap(newBitmap);
+      setDisplayUri(bitmapToDataUrl(newBitmap));
+      pushHistory(newBitmap);
+      setLastSavedHash(newHash);
+      onColoringChange?.(newBitmap);
+      onProgress?.('✅ Area filled successfully!');
+    } catch {
+      onProgress?.('❌ Failed to fill area');
     }
-  }, [pngUri, initializeBitmap]);
+  }, [bitmap, selectedColor, canvasSize, lastSavedHash, onColoringChange, onProgress, bitmapToDataUrl]);
 
-  // Handle coloring action - FLOOD FILL
-  const performFloodFill = useCallback(
-    async (touchX: number, touchY: number) => {
-      if (!bitmap) {
-        console.log('❌ No bitmap available for flood fill');
-        return;
-      }
+  const performBrushStroke = useCallback(async (strokePoints: TouchPoint[]) => {
+    if (!bitmap || strokePoints.length === 0) return;
+    try {
+      const bitmapStroke: TouchPoint[] = strokePoints.map((p) => ({
+        x: (p.x / canvasSize.width) * bitmap.width,
+        y: (p.y / canvasSize.height) * bitmap.height,
+      }));
+      const brushStroke: BrushStroke = { points: bitmapStroke, color: isEraser ? '#FFFFFF' : selectedColor, thickness: brushSize };
+      const newBitmap = SimpleColoringEngine.applyBrushStroke(bitmap, brushStroke);
+      setBitmap(newBitmap);
+      setDisplayUri(bitmapToDataUrl(newBitmap));
+      pushHistory(newBitmap);
+      setLastSavedHash(SimpleColoringEngine.hashBitmap(newBitmap));
+      onColoringChange?.(newBitmap);
+      onProgress?.('✅ Brush stroke applied!');
+    } catch {
+      onProgress?.('❌ Failed to paint with brush');
+    }
+  }, [bitmap, selectedColor, brushSize, canvasSize, onColoringChange, onProgress, isEraser, bitmapToDataUrl]);
 
-      try {
-        console.log('🎨 Starting flood fill:', {
-          touchX: Math.round(touchX),
-          touchY: Math.round(touchY),
-          selectedColor,
-        });
-
-        onProgress?.(`🎨 Filling area with ${selectedColor}...`);
-
-        // Convert screen coordinates to bitmap coordinates
-        const bitmapX = Math.floor((touchX / canvasSize.width) * bitmap.width);
-        const bitmapY = Math.floor(
-          (touchY / canvasSize.height) * bitmap.height
-        );
-
-        console.log('📍 Bitmap coordinates:', { bitmapX, bitmapY });
-
-        // Find optimal paint point (avoid borders)
-        const paintPoint = SimpleColoringEngine.findPaintableArea(
-          bitmap,
-          bitmapX,
-          bitmapY
-        );
-
-        if (!paintPoint) {
-          onProgress?.('❌ Cannot fill this area');
-          console.log('❌ No paintable area found');
-          return;
-        }
-
-        // Convert hex color to ARGB
-        const fillColor = SimpleColoringEngine.hexToArgb(selectedColor);
-
-        // Perform flood fill
-        const newBitmap = SimpleColoringEngine.floodFill(
-          bitmap,
-          paintPoint.x,
-          paintPoint.y,
-          fillColor
-        );
-
-        // Check if anything changed
-        const newHash = SimpleColoringEngine.hashBitmap(newBitmap);
-        if (newHash === lastSavedHash) {
-          onProgress?.('⚠️ Area already filled with this color');
-          return;
-        }
-
-        // Update bitmap and display
-        setBitmap(newBitmap);
-        setLastSavedHash(newHash);
-
-        // Update display with colored bitmap (simplified approach)
-        // In a real implementation, you'd convert the bitmap back to an image
-        console.log('🖼️ Updating display with colored bitmap');
-
-        // For now, keep the original display but show success message
-        onProgress?.('✅ Area filled successfully!');
-        onColoringChange?.(newBitmap);
-
-        console.log('✅ Flood fill completed successfully');
-      } catch (error) {
-        console.error('❌ Flood fill failed:', error);
-        onProgress?.('❌ Failed to fill area');
-        Alert.alert('Error', 'Failed to fill area. Please try again.');
-      }
-    },
-    [
-      bitmap,
-      selectedColor,
-      canvasSize,
-      lastSavedHash,
-      onColoringChange,
-      onProgress,
-    ]
-  );
-
-  // Handle brush painting - BRUSH STROKE
-  const performBrushStroke = useCallback(
-    async (strokePoints: TouchPoint[]) => {
-      if (!bitmap || strokePoints.length === 0) {
-        console.log('❌ No bitmap or empty stroke');
-        return;
-      }
-
-      try {
-        console.log('🖌️ Applying brush stroke:', {
-          pointCount: strokePoints.length,
-          selectedColor,
-          brushSize,
-        });
-
-        onProgress?.(`🖌️ Painting with brush...`);
-
-        // Convert screen coordinates to bitmap coordinates
-        const bitmapStroke: TouchPoint[] = strokePoints.map((point) => ({
-          x: (point.x / canvasSize.width) * bitmap.width,
-          y: (point.y / canvasSize.height) * bitmap.height,
-        }));
-
-        const brushStroke: BrushStroke = {
-          points: bitmapStroke,
-          color: selectedColor,
-          thickness: brushSize,
-        };
-
-        // Apply brush stroke
-        const newBitmap = SimpleColoringEngine.applyBrushStroke(
-          bitmap,
-          brushStroke
-        );
-
-        // Update bitmap
-        setBitmap(newBitmap);
-        setLastSavedHash(SimpleColoringEngine.hashBitmap(newBitmap));
-
-        // Notify parent and show success
-        onColoringChange?.(newBitmap);
-        onProgress?.('✅ Brush stroke applied!');
-
-        console.log('✅ Brush stroke completed successfully');
-      } catch (error) {
-        console.error('❌ Brush stroke failed:', error);
-        onProgress?.('❌ Failed to paint with brush');
-      }
-    },
-    [bitmap, selectedColor, brushSize, canvasSize, onColoringChange, onProgress]
-  );
-
-  // Legacy coloring function for backwards compatibility
-  const performColoring = useCallback(
-    async (touchX: number, touchY: number) => {
-      // Default to flood fill mode
-      await performFloodFill(touchX, touchY);
-    },
-    [performFloodFill]
-  );
-
-  // Create pan responder for touch handling with both modes
+  // Touch handling
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => paintMode === 'brush', // Allow moves for brush mode
-
+    onMoveShouldSetPanResponder: () => paintMode === 'brush',
+    onStartShouldSetPanResponderCapture: () => true,
+    onMoveShouldSetPanResponderCapture: () => paintMode === 'brush',
     onPanResponderGrant: (evt) => {
       if (!bitmap || loading) return;
-
       const { locationX, locationY } = evt.nativeEvent;
-
       if (paintMode === 'flood') {
-        // Flood fill mode - single tap
-        if (touchTimeoutRef.current) {
-          clearTimeout(touchTimeoutRef.current);
-        }
-
-        touchTimeoutRef.current = setTimeout(() => {
-          performFloodFill(locationX, locationY);
-        }, 150);
+        if (touchTimeoutRef.current) clearTimeout(touchTimeoutRef.current);
+        touchTimeoutRef.current = setTimeout(() => { performFloodFill(locationX, locationY); }, 120);
       } else {
-        // Brush mode - start drawing
-        setIsDrawing(true);
         drawingRef.current = true;
-        const newStroke = [{ x: locationX, y: locationY }];
-        setCurrentStroke(newStroke);
+        setCurrentStroke([{ x: locationX, y: locationY }]);
       }
     },
-
     onPanResponderMove: (evt) => {
       if (paintMode === 'brush' && drawingRef.current) {
         const { locationX, locationY } = evt.nativeEvent;
         setCurrentStroke((prev) => [...prev, { x: locationX, y: locationY }]);
       }
     },
-
     onPanResponderRelease: () => {
       if (paintMode === 'flood') {
-        // Clear timeout for flood fill if released quickly
-        if (touchTimeoutRef.current) {
-          clearTimeout(touchTimeoutRef.current);
-          touchTimeoutRef.current = null;
-        }
-      } else if (
-        paintMode === 'brush' &&
-        drawingRef.current &&
-        currentStroke.length > 0
-      ) {
-        // Apply the brush stroke
+        if (touchTimeoutRef.current) { clearTimeout(touchTimeoutRef.current); touchTimeoutRef.current = null; }
+      } else if (paintMode === 'brush' && drawingRef.current && currentStroke.length > 0) {
         performBrushStroke(currentStroke);
         setCurrentStroke([]);
-        setIsDrawing(false);
         drawingRef.current = false;
       }
     },
   });
 
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (touchTimeoutRef.current) {
-        clearTimeout(touchTimeoutRef.current);
-      }
-    };
-  }, []);
+  useEffect(() => () => { if (touchTimeoutRef.current) clearTimeout(touchTimeoutRef.current); }, []);
 
   if (loading) {
     return (
@@ -370,186 +239,53 @@ export const PngColoringCanvas: React.FC<PngColoringCanvasProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Paint Mode Toggle */}
-      <View style={styles.modeToggle}>
-        <TouchableOpacity
-          style={[
-            styles.modeButton,
-            paintMode === 'flood' && styles.modeButtonActive,
-          ]}
-          onPress={() => setPaintMode('flood')}
-        >
-          <Ionicons
-            name="color-fill"
-            size={20}
-            color={paintMode === 'flood' ? '#fff' : '#4ECDC4'}
-          />
-          <Text
-            style={[
-              styles.modeText,
-              paintMode === 'flood' && styles.modeTextActive,
-            ]}
-          >
-            Fill
-          </Text>
-        </TouchableOpacity>
+      {/* Mode toggle (hidden when parent controls the mode) */}
+      {!controlledPaintMode && (
+        <View style={styles.modeToggle}>
+          <TouchableOpacity style={[styles.modeButton, paintMode === 'flood' && styles.modeButtonActive]} onPress={() => { setPaintMode('flood'); setIsEraser(false); }}>
+            <MaterialIcons name="format-color-fill" size={20} color={paintMode === 'flood' ? '#fff' : '#4ECDC4'} />
+            <Text style={[styles.modeText, paintMode === 'flood' && styles.modeTextActive]}>Fill</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.modeButton, paintMode === 'brush' && !isEraser && styles.modeButtonActive]} onPress={() => { setPaintMode('brush'); setIsEraser(false); }}>
+            <Ionicons name="brush" size={20} color={paintMode === 'brush' && !isEraser ? '#fff' : '#FF6B6B'} />
+            <Text style={[styles.modeText, paintMode === 'brush' && !isEraser && styles.modeTextActive]}>Paint</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.modeButton, paintMode === 'brush' && isEraser && styles.modeButtonActive]} onPress={() => { setPaintMode('brush'); setIsEraser(true); }}>
+            <MaterialIcons name="format-color-reset" size={20} color={paintMode === 'brush' && isEraser ? '#fff' : '#64748B'} />
+            <Text style={[styles.modeText, paintMode === 'brush' && isEraser && styles.modeTextActive]}>Erase</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-        <TouchableOpacity
-          style={[
-            styles.modeButton,
-            paintMode === 'brush' && styles.modeButtonActive,
-          ]}
-          onPress={() => setPaintMode('brush')}
-        >
-          <Ionicons
-            name="brush"
-            size={20}
-            color={paintMode === 'brush' ? '#fff' : '#FF6B6B'}
-          />
-          <Text
-            style={[
-              styles.modeText,
-              paintMode === 'brush' && styles.modeTextActive,
-            ]}
-          >
-            Paint
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View
-        ref={viewRef}
-        style={[
-          styles.canvasContainer,
-          {
-            width: canvasSize.width,
-            height: canvasSize.height,
-          },
-        ]}
-        {...panResponder.panHandlers}
-      >
-        <Image
-          source={{ uri: displayUri }}
-          style={[
-            styles.coloringImage,
-            {
-              width: canvasSize.width,
-              height: canvasSize.height,
-            },
-          ]}
-          resizeMode="contain"
-        />
-
+      <View ref={viewRef} style={[styles.canvasContainer, { width: canvasSize.width, height: canvasSize.height }]} {...panResponder.panHandlers}>
+        <Image source={{ uri: displayUri }} style={[styles.coloringImage, { width: canvasSize.width, height: canvasSize.height }]} resizeMode="contain" />
         {/* Invisible overlay for touch handling */}
-        <View style={StyleSheet.absoluteFill} />
+        <View style={StyleSheet.absoluteFill} pointerEvents="none" />
       </View>
 
       <View style={styles.infoContainer}>
         <Text style={styles.infoText}>📎 Tap areas to fill with color</Text>
-        <Text style={styles.sizeText}>
-          Size: {bitmap.width}x{bitmap.height}px
-        </Text>
+        <Text style={styles.sizeText}>Size: {bitmap.width}x{bitmap.height}px</Text>
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  modeToggle: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 4,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  modeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-    marginHorizontal: 2,
-  },
-  modeButtonActive: {
-    backgroundColor: '#4ECDC4',
-  },
-  modeText: {
-    marginLeft: 6,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-  },
-  modeTextActive: {
-    color: '#fff',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 50,
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#333',
-    textAlign: 'center',
-  },
-  progressText: {
-    marginTop: 5,
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 50,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#F44336',
-    textAlign: 'center',
-  },
-  canvasContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  coloringImage: {
-    backgroundColor: '#FFFFFF',
-  },
-  infoContainer: {
-    marginTop: 10,
-    alignItems: 'center',
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-  },
-  sizeText: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
-  },
+  container: { alignItems: 'center', paddingVertical: 10 },
+  modeToggle: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 8, padding: 4, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  modeButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, marginHorizontal: 2 },
+  modeButtonActive: { backgroundColor: '#4ECDC4' },
+  modeText: { marginLeft: 6, fontSize: 14, fontWeight: '600', color: '#666' },
+  modeTextActive: { color: '#fff' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 50 },
+  loadingText: { marginTop: 10, fontSize: 16, color: '#333', textAlign: 'center' },
+  progressText: { marginTop: 5, fontSize: 14, color: '#666', textAlign: 'center' },
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 50 },
+  errorText: { fontSize: 16, color: '#F44336', textAlign: 'center' },
+  canvasContainer: { backgroundColor: '#FFFFFF', borderRadius: 8, borderWidth: 2, borderColor: '#E0E0E0', overflow: 'hidden', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
+  coloringImage: { backgroundColor: '#FFFFFF' },
+  infoContainer: { marginTop: 10, alignItems: 'center' },
+  infoText: { fontSize: 14, color: '#666', textAlign: 'center' },
+  sizeText: { fontSize: 12, color: '#999', marginTop: 2 },
 });

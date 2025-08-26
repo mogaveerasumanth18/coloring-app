@@ -1,4 +1,4 @@
-import { ImageManipulator } from 'expo-image-manipulator';
+// Note: Keep this engine free of native dependencies for broad compatibility
 
 export interface TouchPoint {
   x: number;
@@ -41,34 +41,15 @@ export class SimpleColoringEngine {
 
   // Create a bitmap from image URI (simplified approach)
   static async createBitmapFromUri(imageUri: string): Promise<ColoringBitmap> {
-    try {
-      console.log('🖼️ Creating bitmap from URI:', imageUri);
-
-      // Get image info
-      const imageInfo = await ImageManipulator.manipulateAsync(
-        imageUri,
-        [{ resize: { width: 400, height: 400 } }], // Resize for performance
-        { format: ImageManipulator.SaveFormat.PNG }
-      );
-
-      // Create a mock bitmap with coloring template structure
-      const width = 400;
-      const height = 400;
-      const pixels = new Uint32Array(width * height);
-
-      // Fill with white background
-      pixels.fill(this.WHITE_COLOR);
-
-      // Create some mock black borders for coloring areas
-      // In a real implementation, you'd decode the actual PNG pixels
-      this.createMockColoringTemplate(pixels, width, height);
-
-      console.log('✅ Bitmap created successfully');
-      return { width, height, pixels };
-    } catch (error) {
-      console.error('❌ Failed to create bitmap:', error);
-      throw error;
-    }
+    console.log('🖼️ Creating bitmap from URI (fallback engine):', imageUri);
+    // Fallback: fixed-size bitmap with mock outlines; does not parse the PNG
+    const width = 400;
+    const height = 400;
+    const pixels = new Uint32Array(width * height);
+    pixels.fill(this.WHITE_COLOR);
+    this.createMockColoringTemplate(pixels, width, height);
+    console.log('✅ Bitmap created successfully (fallback)');
+    return { width, height, pixels };
   }
 
   // Create mock coloring template with borders
@@ -371,32 +352,8 @@ export class SimpleColoringEngine {
 
   // Convert bitmap to base64 PNG for display
   static async bitmapToBase64(bitmap: ColoringBitmap): Promise<string> {
-    try {
-      // In a real implementation, you would convert the pixel array to actual PNG data
-      // For now, we'll create a simple colored canvas using ImageManipulator
-
-      // This is a simplified approach - create a small colored rectangle as placeholder
-      const result = await ImageManipulator.manipulateAsync(
-        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
-        [
-          {
-            resize: {
-              width: bitmap.width,
-              height: bitmap.height,
-            },
-          },
-        ],
-        {
-          base64: true,
-          format: ImageManipulator.SaveFormat.PNG,
-        }
-      );
-
-      return result.base64 || '';
-    } catch (error) {
-      console.error('❌ Failed to convert bitmap to base64:', error);
-      throw error;
-    }
+  // Placeholder 1x1 PNG base64 (white pixel). Replace with real encoding if needed.
+  return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFhAJ/wlseKgAAAABJRU5ErkJggg==';
   }
 
   // Check if two bitmaps are different

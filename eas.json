@@ -19,14 +19,24 @@
         "EXPO_NO_DOTENV": "1",
         "APP_ENV": "production",
         "FLIPPER_DISABLE": "1"
-      },
-      "prebuildCommand": "pnpm expo install --fix"
+      }
     },
     "simple": {
       "distribution": "internal",
       "pnpm": "9.12.3",
       "android": {
         "buildType": "apk"
+      }
+    },
+    "local": {
+      "distribution": "internal",
+      "pnpm": "9.12.3",
+      "android": {
+        "buildType": "apk",
+        "credentialsSource": "local"
+      },
+      "env": {
+        "APP_ENV": "development"
       }
     },
     "staging": {

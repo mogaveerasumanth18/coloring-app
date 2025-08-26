@@ -10,17 +10,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   scheme: 'colouring',
   slug: 'coloring-book-kids',
   version: Env.VERSION.toString(),
-  orientation: 'portrait',
+  orientation: 'default', // Allow both portrait and landscape for fullscreen feature
   icon: './assets/icon.png',
   userInterfaceStyle: 'automatic',
-  newArchEnabled: true,
+  newArchEnabled: false,  // Disable new architecture to fix MMKV compatibility
   extra: {
     eas: {
-      projectId: '4fd7a234-f462-4860-90ff-cd1a1044b0ef',
+      projectId: '5aaaa822-7ee4-468d-a4a9-343a5884cd1f',
     },
   },
   updates: {
-    url: 'https://u.expo.dev/4fd7a234-f462-4860-90ff-cd1a1044b0ef',
+    url: 'https://u.expo.dev/5aaaa822-7ee4-468d-a4a9-343a5884cd1f',
     fallbackToCacheTimeout: 0,
   },
   assetBundlePatterns: ['**/*'],
@@ -44,6 +44,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     runtimeVersion: '1.0.0',
     package: 'com.coloring.kids.app', // Simple package name
+    compileSdkVersion: 33,
+    targetSdkVersion: 33,
+    permissions: [
+      'WRITE_EXTERNAL_STORAGE',
+      'READ_EXTERNAL_STORAGE',
+    ],
+    buildToolsVersion: '33.0.2',
+    kotlinVersion: '1.9.24',
   },
   web: {
     favicon: './assets/favicon.png',

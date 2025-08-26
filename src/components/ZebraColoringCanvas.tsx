@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   Dimensions,
   PanResponder,
@@ -15,7 +15,7 @@ import {
 
 interface ZebraColoringCanvasProps {
   selectedColor: string;
-  selectedTool: 'brush' | 'bucket';
+  selectedTool: 'brush' | 'bucket' | 'eraser';
   brushSize?: number;
   templateUri?: string;
   onColoringChange?: (imageData: string) => void;
@@ -96,13 +96,13 @@ const createFallbackTemplate = (
   drawCloud(60, h - 80, 18);
 };
 
-export const ZebraColoringCanvas: React.FC<ZebraColoringCanvasProps> = ({
+export const ZebraColoringCanvas = React.forwardRef<any, ZebraColoringCanvasProps>(({
   selectedColor = '#FF6B6B',
   selectedTool = 'bucket',
   brushSize = 5,
   templateUri,
   onColoringChange,
-}) => {
+}, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [zebraState, setZebraState] = useState<ZebraPaintState | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -110,6 +110,56 @@ export const ZebraColoringCanvas: React.FC<ZebraColoringCanvasProps> = ({
   const [lastPoint, setLastPoint] = useState<{ x: number; y: number } | null>(
     null
   );
+  const [history, setHistory] = useState<ImageData[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Expose undo/redo methods via ref
+  useImperativeHandle(ref, () => ({
+    undo: () => {
+      if (historyIndex > 0 && canvasRef.current) {
+        const prevIndex = historyIndex - 1;
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx && history[prevIndex]) {
+          ctx.putImageData(history[prevIndex], 0, 0);
+          setHistoryIndex(prevIndex);
+        }
+      }
+    },
+    redo: () => {
+      if (historyIndex < history.length - 1 && canvasRef.current) {
+        const nextIndex = historyIndex + 1;
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx && history[nextIndex]) {
+          ctx.putImageData(history[nextIndex], 0, 0);
+          setHistoryIndex(nextIndex);
+        }
+      }
+    },
+    save: () => {
+      if (canvasRef.current) {
+        const dataUrl = canvasRef.current.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `zebra-coloring-${Date.now()}.png`;
+        link.href = dataUrl;
+        link.click();
+      }
+    }
+  }));
+
+  const saveToHistory = useCallback(() => {
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+        const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
+        setHistory(prev => {
+          const newHistory = prev.slice(0, historyIndex + 1);
+          newHistory.push(imageData);
+          return newHistory;
+        });
+        setHistoryIndex(prev => prev + 1);
+      }
+    }
+  }, [historyIndex]);
 
   const initializeZebraSystem = useCallback(async () => {
     if (!canvasRef.current) return;
@@ -170,6 +220,9 @@ export const ZebraColoringCanvas: React.FC<ZebraColoringCanvasProps> = ({
 
       // Render initial state
       ZebraPaintEngine.render(canvasRef.current, state);
+      
+      // Save initial state to history
+      setTimeout(() => saveToHistory(), 100);
 
       setIsReady(true);
       console.log('✅ Zebra-paint system initialized');
@@ -204,6 +257,9 @@ export const ZebraColoringCanvas: React.FC<ZebraColoringCanvasProps> = ({
           if (success) {
             // Re-render the canvas
             ZebraPaintEngine.render(canvasRef.current, zebraState);
+            
+            // Save to history
+            saveToHistory();
 
             // Notify parent
             if (onColoringChange) {
@@ -217,13 +273,14 @@ export const ZebraColoringCanvas: React.FC<ZebraColoringCanvasProps> = ({
               '⚠️ Zebra flood fill had no effect - clicked on boundary or out of bounds'
             );
           }
-        } else if (selectedTool === 'brush') {
-          // Handle brush painting
+        } else if (selectedTool === 'brush' || selectedTool === 'eraser') {
+          // Handle brush painting and eraser
+          const toolColor = selectedTool === 'eraser' ? '#FFFFFF' : selectedColor;
           console.log(
-            `🖌️ Zebra brush painting at (${x}, ${y}) with ${selectedColor}, size: ${brushSize}`
+            `🖌️ Zebra ${selectedTool} at (${x}, ${y}) with ${toolColor}, size: ${brushSize}`
           );
 
-          const brushColor = ZebraPaintEngine.hexToArgb(selectedColor);
+          const brushColor = ZebraPaintEngine.hexToArgb(toolColor);
 
           if (isMove && lastPoint) {
             // Draw line from last point to current point for smooth strokes
@@ -251,6 +308,9 @@ export const ZebraColoringCanvas: React.FC<ZebraColoringCanvasProps> = ({
 
           // Re-render the canvas
           ZebraPaintEngine.render(canvasRef.current, zebraState);
+          
+          // Save to history
+          saveToHistory();
 
           // Notify parent
           if (onColoringChange) {
@@ -279,8 +339,8 @@ export const ZebraColoringCanvas: React.FC<ZebraColoringCanvasProps> = ({
   const getCursorStyle = () => {
     if (selectedTool === 'bucket') {
       return 'crosshair';
-    } else if (selectedTool === 'brush') {
-      // Custom brush cursor using SVG data URL
+    } else if (selectedTool === 'brush' || selectedTool === 'eraser') {
+      // Custom brush/eraser cursor using SVG data URL
       const svgCursor = `url("data:image/svg+xml,%3csvg width='16' height='16' xmlns='http://www.w3.org/2000/svg'%3e%3ccircle cx='8' cy='8' r='6' fill='none' stroke='%23000' stroke-width='2'/%3e%3ccircle cx='8' cy='8' r='2' fill='%23000'/%3e%3c/svg%3e") 8 8, crosshair`;
       return svgCursor;
     }
@@ -292,7 +352,7 @@ export const ZebraColoringCanvas: React.FC<ZebraColoringCanvasProps> = ({
     onPanResponderGrant: (evt) => {
       const { locationX, locationY } = evt.nativeEvent;
 
-      if (selectedTool === 'brush') {
+      if (selectedTool === 'brush' || selectedTool === 'eraser') {
         setIsDrawing(true);
         setLastPoint(null); // Reset last point for new stroke
       }
@@ -300,19 +360,19 @@ export const ZebraColoringCanvas: React.FC<ZebraColoringCanvasProps> = ({
       handleCanvasInteraction(locationX, locationY, false);
     },
     onPanResponderMove: (evt) => {
-      if (selectedTool === 'brush' && isDrawing) {
+      if ((selectedTool === 'brush' || selectedTool === 'eraser') && isDrawing) {
         const { locationX, locationY } = evt.nativeEvent;
         handleCanvasInteraction(locationX, locationY, true);
       }
     },
     onPanResponderRelease: () => {
-      if (selectedTool === 'brush') {
+      if (selectedTool === 'brush' || selectedTool === 'eraser') {
         setIsDrawing(false);
         setLastPoint(null); // Clear last point when done drawing
       }
     },
     onPanResponderTerminate: () => {
-      if (selectedTool === 'brush') {
+      if (selectedTool === 'brush' || selectedTool === 'eraser') {
         setIsDrawing(false);
         setLastPoint(null); // Clear last point when interrupted
       }
@@ -361,7 +421,7 @@ export const ZebraColoringCanvas: React.FC<ZebraColoringCanvasProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

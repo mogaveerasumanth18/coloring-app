@@ -1,7 +1,10 @@
 import { Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
+    Alert,
   Dimensions,
+  Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -9,6 +12,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { captureRef } from 'react-native-view-shot';
+import * as FileSystem from 'expo-file-system';
 
 import { EnhancedCanvasColoring } from './EnhancedCanvasColoring';
 import { ImageUploader } from './ImageUploader';
@@ -29,6 +34,10 @@ export default function ColoringBookApp() {
   const [activeTab, setActiveTab] = useState('color'); // 'color', 'templates', 'rewards'
   const [zoom, setZoom] = useState(1);
   const drawingCanvasRef = useRef<any>(null);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const canvasViewRef = useRef<View>(null);
+  const fsCanvasViewRef = useRef<View>(null);
+  const [brushSize, setBrushSize] = useState(5);
 
   const colors = [
     '#FF6B6B',
@@ -68,6 +77,53 @@ export default function ColoringBookApp() {
   const handleZoomReset = () => {
     setZoom(1);
   };
+
+  const enterFullScreen = useCallback(async () => {
+    setIsFullScreen(true);
+    if (Platform.OS !== 'web') {
+      try {
+        const ScreenOrientation = await import('expo-screen-orientation');
+        await ScreenOrientation.lockAsync(
+          ScreenOrientation.OrientationLock.LANDSCAPE
+        );
+      } catch {}
+    }
+  }, []);
+
+  const exitFullScreen = useCallback(async () => {
+    setIsFullScreen(false);
+    if (Platform.OS !== 'web') {
+      try {
+        const ScreenOrientation = await import('expo-screen-orientation');
+        await ScreenOrientation.unlockAsync();
+      } catch {}
+    }
+  }, []);
+
+  const decBrush = () => setBrushSize((v) => Math.max(1, v - 1));
+  const incBrush = () => setBrushSize((v) => Math.min(30, v + 1));
+
+  const saveAll = useCallback(async () => {
+    // Trigger logical save (JSON) inside the canvas component
+    drawingCanvasRef.current?.save?.();
+
+    // Capture the rendered canvas as PNG and save to device storage
+    try {
+      const targetRef = isFullScreen ? fsCanvasViewRef.current : canvasViewRef.current;
+      if (targetRef) {
+        const uri = await captureRef(targetRef, { format: 'png', quality: 1.0 });
+        const fileName = `coloring_${Date.now()}.png`;
+        const dest = FileSystem.documentDirectory ? `${FileSystem.documentDirectory}${fileName}` : uri;
+        if (dest !== uri && FileSystem.documentDirectory) {
+          await FileSystem.copyAsync({ from: uri, to: dest });
+        }
+        Alert.alert('Saved', `Image saved to: ${dest}`);
+      }
+    } catch (e) {
+      console.warn('Canvas capture failed:', e);
+      Alert.alert('Saved', 'Drawing data saved. Image capture not available.');
+    }
+  }, [isFullScreen]);
 
   const renderColorTab = () => (
     <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
@@ -229,28 +285,38 @@ export default function ColoringBookApp() {
 
             <TouchableOpacity
               style={styles.saveButton}
-              onPress={() => drawingCanvasRef.current?.save()}
+              onPress={saveAll}
             >
               <Feather name="download" size={18} color="#FFFFFF" />
               <Text style={styles.saveLabel}>Save</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.saveButton, { backgroundColor: '#0EA5E9' }]}
+              onPress={enterFullScreen}
+            >
+              <Feather name="maximize-2" size={18} color="#FFFFFF" />
+              <Text style={styles.saveLabel}>Expand</Text>
             </TouchableOpacity>
           </View>
 
           <View
             style={[styles.canvasContainer, { transform: [{ scale: zoom }] }]}
           >
-            <EnhancedCanvasColoring
-              ref={drawingCanvasRef}
-              selectedColor={selectedColor}
-              selectedTool={selectedTool}
-              brushWidth={5}
-              canvasWidth={Math.min(screenWidth - 60, 300)}
-              canvasHeight={Math.min(screenWidth - 60, 300)}
-              templateSvg={currentTemplate?.svgData}
-              onSave={(drawingData: any) => {
-                console.log('Drawing saved:', drawingData);
-              }}
-            />
+            <View ref={canvasViewRef} collapsable={false}>
+              <EnhancedCanvasColoring
+                ref={drawingCanvasRef}
+                selectedColor={selectedColor}
+                selectedTool={selectedTool}
+                brushWidth={brushSize}
+                canvasWidth={Math.min(screenWidth - 60, 300)}
+                canvasHeight={Math.min(screenWidth - 60, 300)}
+                templateSvg={currentTemplate?.svgData}
+                onSave={(drawingData: any) => {
+                  console.log('Drawing saved:', drawingData);
+                }}
+              />
+            </View>
           </View>
         </View>
       </View>
@@ -270,6 +336,16 @@ export default function ColoringBookApp() {
               onPress={() => setSelectedColor(color)}
             />
           ))}
+        </View>
+        {/* Brush Size Bar */}
+        <View style={styles.sizeBar}>
+          <TouchableOpacity style={styles.sizeBtn} onPress={decBrush}>
+            <Text style={styles.sizeBtnLabel}>-</Text>
+          </TouchableOpacity>
+          <Text style={styles.sizeValue}>{brushSize}</Text>
+          <TouchableOpacity style={styles.sizeBtn} onPress={incBrush}>
+            <Text style={styles.sizeBtnLabel}>+</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </ScrollView>
@@ -450,6 +526,121 @@ export default function ColoringBookApp() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Full Screen Canvas Modal */}
+  <Modal
+        visible={isFullScreen}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={exitFullScreen}
+      >
+        <SafeAreaView style={styles.fullScreenContainer}>
+          {/* Top Bar */}
+          <View style={styles.fullScreenTopBar}>
+            <TouchableOpacity style={styles.fullScreenIconBtn} onPress={exitFullScreen}>
+              <Feather name="minimize-2" size={20} color="#0F172A" />
+              <Text style={styles.fullScreenTopBarLabel}>Close</Text>
+            </TouchableOpacity>
+            <View style={{ flexDirection: 'row' }}>
+              <TouchableOpacity
+                style={[styles.fullScreenIconBtn, { marginRight: 8 }]}
+                onPress={() => drawingCanvasRef.current?.undo()}
+              >
+                <Ionicons name="arrow-undo" size={18} color="#0F172A" />
+                <Text style={styles.fullScreenTopBarLabel}>Undo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.fullScreenIconBtn, { marginRight: 8 }]}
+                onPress={() => drawingCanvasRef.current?.redo()}
+              >
+                <Ionicons name="arrow-redo" size={18} color="#0F172A" />
+                <Text style={styles.fullScreenTopBarLabel}>Redo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.fullScreenIconBtn, styles.fullScreenSave]}
+                onPress={saveAll}
+              >
+                <Feather name="download" size={18} color="#FFFFFF" />
+                <Text style={[styles.fullScreenTopBarLabel, { color: '#FFFFFF' }]}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Landscape: Tools left, Canvas right */}
+          <View style={styles.fullScreenContent}>
+            {/* Tools */}
+            <View style={styles.fullScreenTools}>
+              <Text style={styles.fsSectionTitle}>Tools</Text>
+              <View style={styles.toolsGrid}>
+                <TouchableOpacity
+                  style={[styles.modernToolButton, selectedTool === 'brush' && styles.activeModernTool]}
+                  onPress={() => setSelectedTool('brush')}
+                >
+                  <Feather name="edit-2" size={20} color={selectedTool === 'brush' ? '#FFFFFF' : '#64748B'} />
+                  <Text style={[styles.modernToolLabel, selectedTool === 'brush' && styles.activeModernToolLabel]}>Brush</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modernToolButton, selectedTool === 'bucket' && styles.activeModernTool]}
+                  onPress={() => setSelectedTool('bucket')}
+                >
+                  <MaterialIcons name="format-color-fill" size={20} color={selectedTool === 'bucket' ? '#FFFFFF' : '#64748B'} />
+                  <Text style={[styles.modernToolLabel, selectedTool === 'bucket' && styles.activeModernToolLabel]}>Fill</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modernToolButton, selectedTool === 'eraser' && styles.activeModernTool]}
+                  onPress={() => setSelectedTool('eraser')}
+                >
+                  <MaterialIcons name="auto-fix-off" size={20} color={selectedTool === 'eraser' ? '#FFFFFF' : '#64748B'} />
+                  <Text style={[styles.modernToolLabel, selectedTool === 'eraser' && styles.activeModernToolLabel]}>Eraser</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.fsSectionTitle, { marginTop: 12 }]}>Colors</Text>
+              <View style={[styles.colorGrid, { paddingRight: 8 }]}> 
+                {colors.map((color) => (
+                  <TouchableOpacity
+                    key={color}
+                    style={[styles.colorButton, { backgroundColor: color }, selectedColor === color && styles.selectedColor]}
+                    onPress={() => setSelectedColor(color)}
+                  />
+                ))}
+              </View>
+
+              {/* Size Bar */}
+              <Text style={[styles.fsSectionTitle, { marginTop: 12 }]}>Size</Text>
+              <View style={styles.fsSizeBar}>
+                <TouchableOpacity style={styles.sizeBtn} onPress={decBrush}>
+                  <Text style={styles.sizeBtnLabel}>-</Text>
+                </TouchableOpacity>
+                <Text style={styles.sizeValue}>{brushSize}</Text>
+                <TouchableOpacity style={styles.sizeBtn} onPress={incBrush}>
+                  <Text style={styles.sizeBtnLabel}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Canvas */}
+            <View style={styles.fullScreenCanvasArea}>
+              <View style={[styles.canvasContainer, { transform: [{ scale: Math.min(1.2, Math.max(1, zoom)) }] }]}>
+                <View ref={fsCanvasViewRef} collapsable={false}>
+                  <EnhancedCanvasColoring
+                    ref={drawingCanvasRef}
+                    selectedColor={selectedColor}
+                    selectedTool={selectedTool}
+                    brushWidth={brushSize}
+                    canvasWidth={Math.max(Dimensions.get('window').width, Dimensions.get('window').height) - 220}
+                    canvasHeight={Math.min(Dimensions.get('window').width, Dimensions.get('window').height) - 120}
+                    templateSvg={currentTemplate?.svgData}
+                    onSave={(drawingData: any) => {
+                      console.log('Drawing saved:', drawingData);
+                    }}
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -870,6 +1061,35 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
+  },
+  sizeBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  sizeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  sizeBtnLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  sizeValue: {
+    minWidth: 32,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginHorizontal: 12,
   },
 
   // Templates Tab

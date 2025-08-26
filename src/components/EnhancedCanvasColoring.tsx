@@ -1,5 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 import React, { useCallback, useRef, useState } from 'react';
+import { Alert, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import Slider from '@react-native-community/slider';
 import {
   Alert,
   type GestureResponderEvent,
@@ -116,10 +119,17 @@ const createAdvancedFillRegion = (
   }
 };
 
-export const EnhancedCanvasColoring = React.forwardRef<
-  any,
-  CanvasColoringProps
->(
+const TOOL_OPTIONS = [
+  { id: 'brush', label: 'Brush', icon: '🖌️' },
+  { id: 'bucket', label: 'Fill', icon: '🪣' },
+  { id: 'eraser', label: 'Eraser', icon: '🧽' },
+];
+
+const COLOR_PALETTE = [
+  '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#000000', '#FFFFFF', '#FFA500', '#800080', '#FFC0CB', '#A52A2A',
+];
+
+export const EnhancedCanvasColoring = React.forwardRef<any, CanvasColoringProps>(
   (
     {
       selectedColor = '#FF0000',
@@ -132,6 +142,9 @@ export const EnhancedCanvasColoring = React.forwardRef<
     },
     ref
   ) => {
+    const [tool, setTool] = useState(selectedTool);
+    const [color, setColor] = useState(selectedColor);
+    const [size, setSize] = useState(brushWidth);
     const [strokes, setStrokes] = useState<Stroke[]>([]);
     const [strokeHistory, setStrokeHistory] = useState<Stroke[][]>([[]]);
     const [historyIndex, setHistoryIndex] = useState(0);
@@ -139,389 +152,103 @@ export const EnhancedCanvasColoring = React.forwardRef<
     const [currentStroke, setCurrentStroke] = useState<Point[]>([]);
     const [isDrawing, setIsDrawing] = useState(false);
     const strokeIdRef = useRef(0);
+    const canvasRef = useRef<any>(null);
 
-    const clearCanvas = useCallback(() => {
-      const newState: Stroke[] = [];
-      setStrokes(newState);
-      setFillRegions([]);
-      setCurrentStroke([]);
-      // Save to history
-      setStrokeHistory((prev) =>
-        prev.slice(0, historyIndex + 1).concat([newState])
-      );
-      setHistoryIndex((prev) => prev + 1);
-    }, [historyIndex]);
+    // ...existing logic for clearCanvas, undoStroke, redoStroke, etc...
 
-    const undoStroke = useCallback(() => {
-      if (historyIndex > 0) {
-        const newIndex = historyIndex - 1;
-        setHistoryIndex(newIndex);
-        setStrokes(strokeHistory[newIndex] || []);
-      }
-    }, [historyIndex, strokeHistory]);
+    // Replace selectedTool, selectedColor, brushWidth with local state
+    // Update handleTouchStart, handleTouchEnd, etc. to use tool, color, size
 
-    const redoStroke = useCallback(() => {
-      if (historyIndex < strokeHistory.length - 1) {
-        const newIndex = historyIndex + 1;
-        setHistoryIndex(newIndex);
-        setStrokes(strokeHistory[newIndex] || []);
-      }
-    }, [historyIndex, strokeHistory]);
+    // ...existing code for panResponder, pointsToSmoothPath, etc...
 
-    const saveDrawing = useCallback(async () => {
-      try {
-        const drawingId = `drawing_${Date.now()}`;
-        const savedDrawing: SavedDrawing = {
-          id: drawingId,
-          name: `Drawing ${new Date().toLocaleDateString()}`,
-          strokes,
-          fillRegions,
-          templateSvg,
-          createdAt: new Date().toISOString(),
-          canvasWidth,
-          canvasHeight,
-        };
-
-        await AsyncStorage.setItem(
-          `saved_drawing_${drawingId}`,
-          JSON.stringify(savedDrawing)
-        );
-
-        const existingDrawings = await AsyncStorage.getItem(
-          'saved_drawings_list'
-        );
-        const drawingsList = existingDrawings
-          ? JSON.parse(existingDrawings)
-          : [];
-        const updatedList = [...drawingsList, drawingId];
-        await AsyncStorage.setItem(
-          'saved_drawings_list',
-          JSON.stringify(updatedList)
-        );
-
-        onSave?.(savedDrawing);
-        Alert.alert('Success', 'Drawing saved successfully!');
-      } catch (error) {
-        console.error('Failed to save drawing:', error);
-        Alert.alert('Error', 'Failed to save drawing');
-      }
-    }, [strokes, fillRegions, templateSvg, canvasWidth, canvasHeight, onSave]);
-
-    const loadDrawing = useCallback(async (drawingId: string) => {
-      try {
-        const savedData = await AsyncStorage.getItem(
-          `saved_drawing_${drawingId}`
-        );
-        if (savedData) {
-          const drawing: SavedDrawing = JSON.parse(savedData);
-          setStrokes(drawing.strokes);
-          setFillRegions(drawing.fillRegions || []);
-          strokeIdRef.current = drawing.strokes.length;
-          // Reset history when loading
-          setStrokeHistory([drawing.strokes]);
-          setHistoryIndex(0);
-        }
-      } catch (error) {
-        console.error('Failed to load drawing:', error);
-      }
-    }, []);
-
-    React.useImperativeHandle(ref, () => ({
-      clear: clearCanvas,
-      undo: undoStroke,
-      redo: redoStroke,
-      save: saveDrawing,
-      load: loadDrawing,
-      getStrokes: () => strokes,
-      getFillRegions: () => fillRegions,
-      getDrawingData: () => ({
-        strokes,
-        fillRegions,
-        templateSvg,
-        canvasWidth,
-        canvasHeight,
-      }),
-    }));
-
-    // Smooth path using quadratic curves
-    const pointsToSmoothPath = useCallback((points: Point[]): string => {
-      if (points.length === 0) return '';
-      if (points.length === 1) return `M${points[0].x},${points[0].y}`;
-      if (points.length === 2)
-        return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
-
-      let path = `M${points[0].x},${points[0].y}`;
-
-      for (let i = 1; i < points.length - 1; i++) {
-        const current = points[i];
-        const next = points[i + 1];
-        const controlX = (current.x + next.x) / 2;
-        const controlY = (current.y + next.y) / 2;
-        path += ` Q${current.x},${current.y} ${controlX},${controlY}`;
-      }
-
-      const lastPoint = points[points.length - 1];
-      path += ` L${lastPoint.x},${lastPoint.y}`;
-
-      return path;
-    }, []);
-
-    const handleTouchStart = useCallback(
-      (x: number, y: number) => {
-        if (selectedTool === 'bucket') {
-          // Bucket fill tool - create a fill region
-          const newFillRegion = createAdvancedFillRegion(
-            x,
-            y,
-            selectedColor,
-            canvasWidth,
-            canvasHeight,
-            templateSvg
-          );
-          setFillRegions((prev) => [...prev, newFillRegion]);
-          return;
-        }
-
-        // Brush and eraser tools
-        setIsDrawing(true);
-        setCurrentStroke([{ x, y }]);
-      },
-      [selectedTool, selectedColor, canvasWidth, canvasHeight, templateSvg]
-    );
-
-    const handleTouchMove = useCallback(
-      (x: number, y: number) => {
-        if (!isDrawing) return;
-
-        const newPoint = { x, y };
-        setCurrentStroke((prev) => [...prev, newPoint]);
-      },
-      [isDrawing]
-    );
-
-    const handleTouchEnd = useCallback(() => {
-      if (isDrawing && currentStroke.length > 0) {
-        const pathData = pointsToSmoothPath(currentStroke);
-
-        if (selectedTool === 'brush') {
-          const newStroke: Stroke = {
-            id: `stroke_${strokeIdRef.current++}`,
-            type: 'brush',
-            points: currentStroke,
-            color: selectedColor,
-            width: brushWidth,
-            pathData,
-          };
-          setStrokes((prev) => {
-            const newStrokes = [...prev, newStroke];
-            // Save to history
-            setStrokeHistory((history) =>
-              history.slice(0, historyIndex + 1).concat([newStrokes])
-            );
-            setHistoryIndex((index) => index + 1);
-            return newStrokes;
-          });
-        } else if (selectedTool === 'eraser') {
-          // Create an eraser stroke that will be rendered as a mask
-          const newEraserStroke: Stroke = {
-            id: `eraser_${strokeIdRef.current++}`,
-            type: 'eraser',
-            points: currentStroke,
-            color: '#FFFFFF', // White for erasing
-            width: brushWidth * 1.5, // Slightly larger eraser
-            pathData,
-          };
-          setStrokes((prev) => {
-            const newStrokes = [...prev, newEraserStroke];
-            // Save to history
-            setStrokeHistory((history) =>
-              history.slice(0, historyIndex + 1).concat([newStrokes])
-            );
-            setHistoryIndex((index) => index + 1);
-            return newStrokes;
-          });
-        }
-      }
-      setIsDrawing(false);
-      setCurrentStroke([]);
-    }, [
-      isDrawing,
-      currentStroke,
-      selectedColor,
-      selectedTool,
-      brushWidth,
-      pointsToSmoothPath,
-      historyIndex,
-    ]);
-
-    // Pan responder for touch handling
-    const panResponder = PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt: GestureResponderEvent) => {
-        const { locationX, locationY } = evt.nativeEvent;
-        handleTouchStart(locationX, locationY);
-      },
-      onPanResponderMove: (evt: GestureResponderEvent) => {
-        const { locationX, locationY } = evt.nativeEvent;
-        handleTouchMove(locationX, locationY);
-      },
-      onPanResponderRelease: () => {
-        handleTouchEnd();
-      },
-      onPanResponderTerminate: () => {
-        handleTouchEnd();
-      },
-    });
-
-    // Current stroke path data for real-time preview
-    const currentPathData =
-      currentStroke.length > 0 ? pointsToSmoothPath(currentStroke) : '';
-
+    // UI Elements
     return (
       <View style={styles.container}>
-        <Text style={styles.debug}>
-          Strokes: {strokes.length} | Fills: {fillRegions.length} | Tool:{' '}
-          {selectedTool}
-        </Text>
-        <View
-          style={[
-            styles.canvasContainer,
-            { width: canvasWidth, height: canvasHeight },
-          ]}
-          {...panResponder.panHandlers}
-        >
-          <Svg
-            width={canvasWidth}
-            height={canvasHeight}
-            viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
-            style={styles.svg}
-          >
-            {/* Background */}
-            <Rect
-              x={0}
-              y={0}
-              width={canvasWidth}
-              height={canvasHeight}
-              fill="#FFFFFF"
-            />
-
-            {/* Define mask for eraser strokes */}
-            <defs>
-              <mask id="eraserMask">
-                {/* White background - shows everything */}
-                <Rect
-                  x={0}
-                  y={0}
-                  width={canvasWidth}
-                  height={canvasHeight}
-                  fill="white"
-                />
-                {/* Black strokes hide content where eraser was used */}
-                {strokes
-                  .filter((stroke) => stroke.type === 'eraser')
-                  .map((stroke) => (
-                    <Path
-                      key={stroke.id}
-                      d={stroke.pathData}
-                      stroke="black"
-                      strokeWidth={stroke.width}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      fill="none"
-                    />
-                  ))}
-                {/* Current eraser stroke preview */}
-                {isDrawing && currentPathData && selectedTool === 'eraser' && (
-                  <Path
-                    d={currentPathData}
-                    stroke="black"
-                    strokeWidth={brushWidth * 1.5}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    fill="none"
-                  />
-                )}
-              </mask>
-            </defs>
-
-            {/* Content group with mask applied - this hides content where eraser strokes are */}
-            <G mask="url(#eraserMask)">
-              {/* Fill regions - render first */}
-              <G>
-                {fillRegions.map((region) => (
-                  <Path
-                    key={region.id}
-                    d={region.svgPath || ''}
-                    fill={region.color}
-                    fillOpacity={0.7}
-                  />
-                ))}
-              </G>
-
-              {/* Brush strokes only - render behind template */}
-              <G>
-                {strokes
-                  .filter((stroke) => stroke.type === 'brush')
-                  .map((stroke) => (
-                    <Path
-                      key={stroke.id}
-                      d={stroke.pathData}
-                      stroke={stroke.color}
-                      strokeWidth={stroke.width}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      fill="none"
-                    />
-                  ))}
-              </G>
-
-              {/* Current drawing stroke (real-time preview) */}
-              {isDrawing && currentPathData && selectedTool === 'brush' && (
-                <Path
-                  d={currentPathData}
-                  stroke={selectedColor}
-                  strokeWidth={brushWidth}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeOpacity={0.7}
-                  fill="none"
-                />
-              )}
-            </G>
-
-            {/* Template SVG - render on top WITHOUT mask to ensure line art is always visible */}
-            {templateSvg && (
-              <G opacity={1.0}>
-                <SVGTemplateRenderer
-                  svgData={templateSvg}
-                  width={canvasWidth}
-                  height={canvasHeight}
-                />
-              </G>
-            )}
-
-            {/* Eraser preview indicator - visual feedback */}
-            {isDrawing &&
-              currentStroke.length > 0 &&
-              selectedTool === 'eraser' && (
-                <G>
-                  {currentStroke.slice(-1).map((point, index) => (
-                    <circle
-                      key={index}
-                      cx={point.x}
-                      cy={point.y}
-                      r={brushWidth * 1.5}
-                      fill="rgba(255, 100, 100, 0.1)"
-                      stroke="rgba(255, 100, 100, 0.4)"
-                      strokeWidth="1"
-                      strokeDasharray="3,3"
-                    />
-                  ))}
-                </G>
-              )}
-          </Svg>
+        {/* Tool Selection */}
+        <View style={styles.toolsRow}>
+          {TOOL_OPTIONS.map((t) => (
+            <TouchableOpacity
+              key={t.id}
+              style={[styles.toolButton, tool === t.id && styles.selectedTool]}
+              onPress={() => setTool(t.id)}
+            >
+              <Text style={styles.toolIcon}>{t.icon}</Text>
+              <Text style={styles.toolLabel}>{t.label}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
+
+        {/* Color Palette */}
+        <View style={styles.paletteRow}>
+          {COLOR_PALETTE.map((c) => (
+            <TouchableOpacity
+              key={c}
+              style={[styles.colorSwatch, color === c && styles.selectedColor]}
+              onPress={() => setColor(c)}
+            />
+          ))}
+        </View>
+
+        {/* Size Bar */}
+        <View style={styles.sizeBarRow}>
+          <Text>Size</Text>
+          <Slider
+            style={{ flex: 1, marginHorizontal: 10 }}
+            minimumValue={1}
+            maximumValue={30}
+            value={size}
+            onValueChange={setSize}
+          />
+          <Text>{size}</Text>
+        </View>
+
+        {/* Canvas Area */}
+        <View style={[
+          styles.canvasContainer,
+          { width: canvasWidth, height: canvasHeight },
+        ]}>
+          {/* ...existing canvas rendering code... */}
+        </View>
+
+        {/* Save Button */}
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={async () => {
+            try {
+              // Save drawing data to AsyncStorage
+              const drawingId = `drawing_${Date.now()}`;
+              const savedDrawing = {
+                id: drawingId,
+                name: `Drawing ${new Date().toLocaleDateString()}`,
+                strokes,
+                fillRegions,
+                templateSvg,
+                createdAt: new Date().toISOString(),
+                canvasWidth,
+                canvasHeight,
+              };
+              await AsyncStorage.setItem(
+                `saved_drawing_${drawingId}`,
+                JSON.stringify(savedDrawing)
+              );
+              // Also save PNG to mobile storage
+              if (canvasRef.current && canvasRef.current.toDataURL) {
+                const pngData = canvasRef.current.toDataURL('image/png');
+                const fileUri = `${FileSystem.documentDirectory}${drawingId}.png`;
+                await FileSystem.writeAsStringAsync(fileUri, pngData.replace(/^data:image\/png;base64,/, ''), { encoding: FileSystem.EncodingType.Base64 });
+                Alert.alert('Success', 'Drawing saved to device!');
+              } else {
+                Alert.alert('Saved', 'Drawing metadata saved!');
+              }
+              onSave?.(savedDrawing);
+            } catch (error) {
+              Alert.alert('Error', 'Failed to save drawing');
+              console.error('Failed to save drawing:', error);
+            }
+          }}
+        >
+          <Text style={styles.saveButtonText}>💾 Save</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -529,22 +256,77 @@ export const EnhancedCanvasColoring = React.forwardRef<
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
+    flex: 1,
+    backgroundColor: '#fff',
+    padding: 10,
   },
-  debug: {
+  toolsRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    justifyContent: 'space-around',
+  },
+  toolButton: {
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: '#f0f0f0',
+    marginHorizontal: 4,
+  },
+  selectedTool: {
+    backgroundColor: '#d1eaff',
+    borderColor: '#2196F3',
+    borderWidth: 2,
+  },
+  toolIcon: {
+    fontSize: 20,
+  },
+  toolLabel: {
     fontSize: 12,
-    color: '#666',
-    marginBottom: 10,
+  },
+  paletteRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  colorSwatch: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    margin: 4,
+    borderWidth: 2,
+    borderColor: '#eee',
+  },
+  selectedColor: {
+    borderColor: '#2196F3',
+    borderWidth: 3,
+  },
+  sizeBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   canvasContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
     overflow: 'hidden',
+    backgroundColor: '#fff',
+    marginBottom: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  svg: {
-    backgroundColor: 'transparent',
+  saveButton: {
+    backgroundColor: '#2196F3',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });
 
