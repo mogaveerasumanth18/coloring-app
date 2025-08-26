@@ -28,6 +28,7 @@
     "@shopify/flash-list": "^1.7.6",
     "axios": "^1.11.0",
     "base-64": "^1.0.0",
+    "eas-cli": "^16.17.4",
     "expo": "~53.0.22",
     "expo-constants": "~17.1.7",
     "expo-dev-client": "~5.2.4",
