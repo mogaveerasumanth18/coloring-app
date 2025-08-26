@@ -53,26 +53,36 @@ jobs:
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean
 
+      - name: Update Gradle wrapper to required version
+        run: |
+          cd android
+          echo "distributionBase=GRADLE_USER_HOME" > gradle/wrapper/gradle-wrapper.properties
+          echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
+          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.10.2-bin.zip" >> gradle/wrapper/gradle-wrapper.properties
+          echo "networkTimeout=10000" >> gradle/wrapper/gradle-wrapper.properties
+          echo "validateDistributionUrl=true" >> gradle/wrapper/gradle-wrapper.properties
+          echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
+          echo "zipStorePath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
+          echo "Updated gradle-wrapper.properties:"
+          cat gradle/wrapper/gradle-wrapper.properties
+
       - name: Make gradlew executable
         run: chmod +x ./android/gradlew
 
-      - name: Setup Gradle cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+      - name: Verify Gradle wrapper version
+        run: ./gradlew --version
+        working-directory: android
 
-      - name: Clean Gradle cache
-        run: ./gradlew clean
+      - name: Clean Gradle cache completely
+        run: |
+          rm -rf ~/.gradle/caches
+          rm -rf ~/.gradle/wrapper
+          ./gradlew clean
         working-directory: android
         continue-on-error: true
 
-      - name: Build APK
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Build APK with correct Gradle version
+        run: ./gradlew assembleDebug --stacktrace --info
         working-directory: android
 
       - name: Upload APK artifact
