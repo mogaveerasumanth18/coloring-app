@@ -26,13 +26,15 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18   # or 16 depending on your Expo/React Native version
+          node-version: 18   # or 16 if your Expo SDK requires it
 
       - name: Install JS dependencies
         run: npm install
 
       - name: Set up Gradle
         uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: 8.6  
 
       - name: Build APK
         run: gradle assembleDebug
