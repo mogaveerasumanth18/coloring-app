@@ -1,0 +1,97 @@
+name: Android local build (no EAS)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: "--max_old_space_size=4096"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: node-modules-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      # If you use Expo managed workflow, prebuild to create android/ (skip if you committed android/)
+      - name: Prebuild native (Expo) — create android/ if missing
+        if: ${{ !hashFiles('android/**') }}
+        run: |
+          npx expo prebuild --platform android --no-install
+
+      - name: Setup Java (for Gradle)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK tools
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 33
+          target: default
+          build-tools: "33.0.2"
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      # Optional: set up keystore for SIGNED release builds (only if secrets provided)
+      - name: Decode keystore (if secret present)
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          mkdir -p android/keystores
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/keystores/my-upload-key.jks
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+
+      - name: Create ~/.gradle/gradle.properties for signing (if secrets present)
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "MYAPP_UPLOAD_STORE_FILE=$(pwd)/android/keystores/my-upload-key.jks" >> $HOME/.gradle/gradle.properties
+          echo "MYAPP_UPLOAD_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> $HOME/.gradle/gradle.properties
+          echo "MYAPP_UPLOAD_STORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> $HOME/.gradle/gradle.properties
+          echo "MYAPP_UPLOAD_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> $HOME/.gradle/gradle.properties
+
+      # Build - choose release or debug depending on whether keystore exists
+      - name: Build release APK (signed if keystore provided)
+        run: |
+          cd android
+          # If signing props set, this will produce a signed release APK at app/build/outputs/apk/release/
+          ./gradlew assembleRelease --no-daemon
+        env:
+          JAVA_HOME: ${{ steps.setup-java.outputs.path }}
+
+      # Fallback: assembleDebug (if release not created or you prefer debug)
+      - name: Ensure debug APK exists (run assembleDebug if no release produced)
+        run: |
+          if [ ! -f android/app/build/outputs/apk/release/app-release.apk ]; then
+            cd android
+            ./gradlew assembleDebug --no-daemon
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/debug/app-debug.apk
