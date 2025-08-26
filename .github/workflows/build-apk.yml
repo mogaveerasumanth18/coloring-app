@@ -58,7 +58,7 @@ jobs:
           cd android
           echo "distributionBase=GRADLE_USER_HOME" > gradle/wrapper/gradle-wrapper.properties
           echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
-          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.10.2-bin.zip" >> gradle/wrapper/gradle-wrapper.properties
+          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.10.2-all.zip" >> gradle/wrapper/gradle-wrapper.properties
           echo "networkTimeout=10000" >> gradle/wrapper/gradle-wrapper.properties
           echo "validateDistributionUrl=true" >> gradle/wrapper/gradle-wrapper.properties
           echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
@@ -70,7 +70,13 @@ jobs:
         run: chmod +x ./android/gradlew
 
       - name: Verify Gradle wrapper version
-        run: ./gradlew --version
+        run: |
+          echo "=== Gradle wrapper properties ==="
+          cat gradle/wrapper/gradle-wrapper.properties
+          echo "=== Gradle version check ==="
+          ./gradlew --version
+          echo "=== Gradle wrapper info ==="
+          ./gradlew wrapper --gradle-version 8.10.2 --distribution-type all
         working-directory: android
 
       - name: Clean Gradle cache completely
