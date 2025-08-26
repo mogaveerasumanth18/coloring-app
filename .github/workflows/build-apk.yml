@@ -53,6 +53,13 @@ jobs:
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean
 
+      - name: Remove system Gradle to avoid conflicts
+        run: |
+          # Remove any system Gradle installations
+          sudo rm -rf /opt/gradle* || true
+          # Remove gradle from PATH by creating a new PATH without it
+          echo "PATH=$(echo $PATH | tr ':' '\n' | grep -v gradle | tr '\n' ':')" >> $GITHUB_ENV
+
       - name: Update Gradle wrapper to required version
         run: |
           cd android
@@ -66,29 +73,20 @@ jobs:
           echo "Updated gradle-wrapper.properties:"
           cat gradle/wrapper/gradle-wrapper.properties
 
-      - name: Make gradlew executable
-        run: chmod +x ./android/gradlew
-
-      - name: Verify Gradle wrapper version
+      - name: Make gradlew executable and force wrapper download
         run: |
-          echo "=== Gradle wrapper properties ==="
-          cat gradle/wrapper/gradle-wrapper.properties
-          echo "=== Gradle version check ==="
+          chmod +x ./android/gradlew
+          cd android
+          echo "=== Checking for system gradle ==="
+          which gradle || echo "No system gradle found (good!)"
+          echo "=== Using Gradle wrapper ==="
           ./gradlew --version
-          echo "=== Gradle wrapper info ==="
-          ./gradlew wrapper --gradle-version 8.10.2 --distribution-type all
-        working-directory: android
+          echo "=== Gradle wrapper should now be using 8.10.2 ==="
 
-      - name: Clean Gradle cache completely
+      - name: Build APK using Gradle wrapper
         run: |
-          rm -rf ~/.gradle/caches
-          rm -rf ~/.gradle/wrapper
-          ./gradlew clean
-        working-directory: android
-        continue-on-error: true
-
-      - name: Build APK with correct Gradle version
-        run: ./gradlew assembleDebug --stacktrace --info
+          echo "Building with Gradle wrapper..."
+          ./gradlew clean assembleDebug --stacktrace --info
         working-directory: android
 
       - name: Upload APK artifact
