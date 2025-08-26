@@ -23,11 +23,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Set up Gradle
+        uses: gradle/gradle-build-action@v2
+
       - name: Build APK
-        run: ./gradlew assembleDebug
+        run: gradle assembleDebug
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4   # <-- updated from v3 to v4
+        uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/*.apk
