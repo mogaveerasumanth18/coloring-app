@@ -1,48 +1,63 @@
-name: Build APK
+name: Build Standalone APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
-      - name: Install JS dependencies
-        run: npm install
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
 
-      - name: Set up Gradle
-        uses: gradle/gradle-build-action@v2
-        with:
-          gradle-version: 8.10.2   # 👈 required for Expo SDK 53
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
 
-      - name: Clean Gradle cache
-        run: gradle clean
+      - name: Setup Expo CLI
+        run: pnpm add -g @expo/cli eas-cli
+
+      - name: Generate Android project for standalone build
+        run: npx expo prebuild --platform android --clean
+
+      - name: Update Gradle wrapper to required version
+        run: |
+          cd android
+          echo "distributionBase=GRADLE_USER_HOME" > gradle/wrapper/gradle-wrapper.properties
+          echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
+          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.10.2-all.zip" >> gradle/wrapper/gradle-wrapper.properties
+          echo "networkTimeout=10000" >> gradle/wrapper/gradle-wrapper.properties
+          echo "validateDistributionUrl=true" >> gradle/wrapper/gradle-wrapper.properties
+          echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
+          echo "zipStorePath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
+
+      - name: Make gradlew executable
+        run: chmod +x ./android/gradlew
+
+      - name: Build standalone release APK
+        run: |
+          echo "Building standalone release APK..."
+          ./gradlew assembleRelease --stacktrace
         working-directory: android
-        continue-on-error: true
 
-      - name: Build APK
-        run: gradle assembleDebug
-        working-directory: android
-
-      - name: Upload APK artifact
+      - name: Upload standalone APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: coloring-app-standalone-apk
+          path: android/app/build/outputs/apk/release/*.apk
