@@ -111,18 +111,19 @@ export default function IntegratedColoringBookApp({
     loadDefaultTemplate();
   }, []);
 
-  // Pinch gesture handler for zooming
+  // Pinch gesture handler for zooming (web only to avoid Android lag)
   const pinchHandler = useAnimatedGestureHandler({
     onStart: (_, context: any) => {
       context.startScale = scale.value;
     },
     onActive: (event: any, context: any) => {
+      // Avoid spamming React state during gesture to prevent jank
       scale.value = context.startScale * event.scale;
-      // Update zoom state for UI
-      runOnJS(setZoom)(Math.max(0.5, Math.min(3, context.startScale * event.scale)));
     },
     onEnd: () => {
-      scale.value = withSpring(Math.max(0.5, Math.min(3, scale.value)));
+      const clamped = Math.max(0.5, Math.min(3, scale.value));
+      scale.value = withSpring(clamped);
+      runOnJS(setZoom)(clamped);
     },
   });
 
@@ -188,9 +189,14 @@ export default function IntegratedColoringBookApp({
     '#8E44AD',
   ];
 
-  const handleZoomIn = () => setZoom((prev) => Math.min(prev + 0.25, 3));
-  const handleZoomOut = () => setZoom((prev) => Math.max(prev - 0.25, 0.5));
-  const handleZoomReset = () => setZoom(1);
+  const applyZoom = (z: number) => {
+    const clamped = Math.max(0.5, Math.min(3, z));
+    setZoom(clamped);
+    scale.value = withSpring(clamped);
+  };
+  const handleZoomIn = () => applyZoom(zoom + 0.25);
+  const handleZoomOut = () => applyZoom(zoom - 0.25);
+  const handleZoomReset = () => applyZoom(1);
 
   const handleSaveNative = async () => {
     if (Platform.OS === 'web') return;
@@ -308,22 +314,17 @@ export default function IntegratedColoringBookApp({
       <View style={styles.canvasArea}>
   {/* Removed status label per UX request */}
 
-        {/* Zoom controls - Right edge floating */}
-        <View
-          style={[styles.floatingZoomControls, { opacity: showZoomUi ? 1 : 0.25 }]}
-          onTouchStart={() => setShowZoomUi(true)}
-          onTouchEnd={() => setShowZoomUi(false)}
-          {...(Platform.OS === 'web'
-            ? { onMouseEnter: () => setShowZoomUi(true), onMouseLeave: () => setShowZoomUi(false) }
-            : {})}
-        >
-          <TouchableOpacity style={styles.modernZoomButton} onPress={() => setZoom(prev => Math.min(prev + 0.25, 3))}>
-            <Feather name="plus" size={20} color="#FFFFFF" />
+        {/* Zoom controls - moved above canvas as a horizontal bar */}
+        <View style={styles.topZoomBar}>
+          <TouchableOpacity style={styles.topZoomBtn} onPress={handleZoomOut}>
+            <Feather name="minus" size={18} color="#1F2937" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.modernZoomButton} onPress={() => setZoom(prev => Math.max(prev - 0.25, 0.5))}>
-            <Feather name="minus" size={20} color="#FFFFFF" />
+          <TouchableOpacity style={styles.topZoomReset} onPress={handleZoomReset}>
+            <Text style={styles.topZoomLabel}>{Math.round(zoom * 100)}%</Text>
           </TouchableOpacity>
-          <Text style={styles.modernZoomText}>{Math.round(zoom * 100)}%</Text>
+          <TouchableOpacity style={styles.topZoomBtn} onPress={handleZoomIn}>
+            <Feather name="plus" size={18} color="#1F2937" />
+          </TouchableOpacity>
         </View>
 
         {/* Canvas */}
@@ -345,24 +346,23 @@ export default function IntegratedColoringBookApp({
               </Animated.View>
             </PinchGestureHandler>
           ) : (
-            <PinchGestureHandler onGestureEvent={pinchHandler}>
-              <Animated.View ref={captureViewRef} collapsable={false} style={styles.modernCanvasContainer}>
-                <PanGestureHandler onGestureEvent={panHandler}>
-                  <Animated.View style={[animatedStyle, { flex: 1 }]}>
-                    <NativeZebraCanvas
-                      ref={bitmapCanvasRef}
-                      templateUri={currentTemplate.bitmapUri}
-                      selectedColor={selectedColor}
-                      selectedTool={selectedTool}
-                      brushWidth={brushSize}
-                      onColoringComplete={() => {}}
-                      width={screenWidth - 32}
-                      height={(screenWidth - 32) * 0.8}
-                    />
-                  </Animated.View>
-                </PanGestureHandler>
-              </Animated.View>
-            </PinchGestureHandler>
+            // On native, pan with two fingers to avoid conflicts with drawing; zoom via top bar
+            <View ref={captureViewRef as any} style={styles.modernCanvasContainer}>
+              <PanGestureHandler onGestureEvent={panHandler} minPointers={2}>
+                <Animated.View style={[animatedStyle, { flex: 1 }]}>
+                  <NativeZebraCanvas
+                    ref={bitmapCanvasRef}
+                    templateUri={currentTemplate.bitmapUri}
+                    selectedColor={selectedColor}
+                    selectedTool={selectedTool}
+                    brushWidth={brushSize}
+                    onColoringComplete={() => {}}
+                    width={screenWidth - 32}
+                    height={(screenWidth - 32) * 0.8}
+                  />
+                </Animated.View>
+              </PanGestureHandler>
+            </View>
           )
         ) : (
           <View style={styles.modernEmptyCanvas}>
@@ -523,15 +523,30 @@ export default function IntegratedColoringBookApp({
 
       {/* Color tray modal */}
       {showColorTray && (
-        <View style={styles.colorTrayOverlay}>
+        <View style={[styles.colorTrayOverlay, styles.centerOverlay]}>
           <TouchableOpacity style={styles.colorTrayBackdrop} activeOpacity={1} onPress={() => setShowColorTray(false)} />
-          <View style={styles.colorTray}>
+          <View style={styles.centerModal}>
             <Text style={styles.colorTrayTitle}>Pick a color</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorTrayRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.centerModalRow}
+            >
               {colors.map((c) => (
-                <TouchableOpacity key={c} onPress={() => { setSelectedColor(c); setShowColorTray(false); }} style={[styles.colorSwatch, { backgroundColor: c }, selectedColor === c && styles.colorSwatchActive]} />
+                <TouchableOpacity
+                  key={c}
+                  onPress={() => {
+                    setSelectedColor(c);
+                    setShowColorTray(false);
+                  }}
+                  style={[styles.centerModalSwatch, { backgroundColor: c }, selectedColor === c && styles.centerModalSwatchActive]}
+                />
               ))}
             </ScrollView>
+            <View style={{ height: 8 }} />
+            <TouchableOpacity style={styles.centerModalClose} onPress={() => setShowColorTray(false)}>
+              <Text style={styles.centerModalCloseText}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -646,6 +661,41 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#E2E8F0',
     borderStyle: 'dashed',
+  },
+  // New top zoom bar (above canvas)
+  topZoomBar: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  topZoomBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topZoomReset: {
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topZoomLabel: {
+    color: '#1F2937',
+    fontWeight: '700',
   },
   bottomToolbar: {
     backgroundColor: '#FFFFFF',
@@ -1313,6 +1363,10 @@ const styles = StyleSheet.create({
     zIndex: 50,
     justifyContent: 'flex-end',
   },
+  centerOverlay: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   colorTrayBackdrop: {
     ...StyleSheet.absoluteFillObject as any,
     backgroundColor: 'rgba(0,0,0,0.35)',
@@ -1323,6 +1377,45 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     paddingVertical: 16,
     paddingHorizontal: 16,
+  },
+  // Centered modal styles (Android issue fix)
+  centerModal: {
+    alignSelf: 'center',
+    width: Math.min(screenWidth - 40, 360),
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  centerModalRow: {
+    paddingVertical: 8,
+    gap: 12,
+  },
+  centerModalSwatch: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  centerModalSwatchActive: {
+    borderColor: '#1E293B',
+  },
+  centerModalClose: {
+    alignSelf: 'center',
+    backgroundColor: '#6366f1',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  centerModalCloseText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   colorTrayTitle: {
     fontSize: 16,
