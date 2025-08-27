@@ -59,6 +59,7 @@ export default function IntegratedColoringBookApp({
   );
   const [zoom, setZoom] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showColorTray, setShowColorTray] = useState(false);
   const webSliderTrackRef = useRef<View>(null);
   const [webSliderTrackWidth, setWebSliderTrackWidth] = useState(0);
   const bitmapCanvasRef = useRef<any>(null);
@@ -304,12 +305,7 @@ export default function IntegratedColoringBookApp({
 
       {/* Canvas Area - Maximized (70-80% of screen) */}
       <View style={styles.canvasArea}>
-        {/* Floating status label */}
-        <View style={styles.floatingStatus}>
-          <Text style={styles.statusText}>
-            Tool: {selectedTool === 'brush' ? 'Pen' : selectedTool === 'bucket' ? 'Bucket' : 'Brush'} • Color: {selectedColor}
-          </Text>
-        </View>
+  {/* Removed status label per UX request */}
 
         {/* Zoom controls - Right edge floating */}
         <View style={styles.floatingZoomControls}>
@@ -450,14 +446,15 @@ export default function IntegratedColoringBookApp({
         </ScrollView>
 
         {/* Footer Buttons - Bottom row */}
-        <View style={styles.footerButtonsRow}>
-          <TouchableOpacity style={styles.footerButton}>
-            <MaterialIcons name="colorize" size={20} color="#64748B" />
-            <Text style={styles.footerButtonText}>Color Picker</Text>
+        {/* Bottom navigation like tabs */}
+        <View style={styles.bottomNavTabs}>
+          <TouchableOpacity style={[styles.navItem, showColorTray && styles.navItemActive]} onPress={() => setShowColorTray(true)}>
+            <MaterialIcons name="colorize" size={22} color={showColorTray ? '#ffffff' : '#64748B'} />
+            <Text style={[styles.navItemText, showColorTray && styles.navItemTextActive]}>Color Picker</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.footerButton} onPress={() => setActiveTab('templates')}>
-            <MaterialIcons name="view-module" size={20} color="#64748B" />
-            <Text style={styles.footerButtonText}>Templates</Text>
+          <TouchableOpacity style={[styles.navItem, activeTab === 'templates' && styles.navItemActive]} onPress={() => setActiveTab('templates')}>
+            <MaterialIcons name="view-module" size={22} color={activeTab === 'templates' ? '#ffffff' : '#64748B'} />
+            <Text style={[styles.navItemText, activeTab === 'templates' && styles.navItemTextActive]}>Templates</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -515,6 +512,21 @@ export default function IntegratedColoringBookApp({
         onColoringChange={() => {}}
         onColoringComplete={() => {}}
       />
+
+      {/* Color tray modal */}
+      {showColorTray && (
+        <View style={styles.colorTrayOverlay}>
+          <TouchableOpacity style={styles.colorTrayBackdrop} activeOpacity={1} onPress={() => setShowColorTray(false)} />
+          <View style={styles.colorTray}>
+            <Text style={styles.colorTrayTitle}>Pick a color</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorTrayRow}>
+              {colors.map((c) => (
+                <TouchableOpacity key={c} onPress={() => { setSelectedColor(c); setShowColorTray(false); }} style={[styles.colorSwatch, { backgroundColor: c }, selectedColor === c && styles.colorSwatchActive]} />
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -572,21 +584,10 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   floatingStatus: {
-    position: 'absolute',
-    bottom: 20,
-    left: 16,
-    right: 16,
-    zIndex: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    alignItems: 'center',
+  display: 'none',
   },
   statusText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+  display: 'none',
   },
   floatingZoomControls: {
     position: 'absolute',
@@ -753,23 +754,13 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   footerButtonsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingBottom: 8,
+  display: 'none',
   },
   footerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+  display: 'none',
   },
   footerButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
-    marginLeft: 8,
+  display: 'none',
   },
   gradientBackground: {
     flex: 1,
@@ -1274,6 +1265,76 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#0F6B45',
     backgroundColor: '#E8FFF5',
+  },
+
+  // New bottom nav tabs
+  bottomNavTabs: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingBottom: 8,
+    paddingTop: 8,
+  },
+  navItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+  },
+  navItemActive: {
+    backgroundColor: '#6366f1',
+  },
+  navItemText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    marginLeft: 8,
+  },
+  navItemTextActive: {
+    color: '#FFFFFF',
+  },
+
+  // Color tray modal
+  colorTrayOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 50,
+    justifyContent: 'flex-end',
+  },
+  colorTrayBackdrop: {
+    ...StyleSheet.absoluteFillObject as any,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  colorTray: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  colorTrayTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 12,
+  },
+  colorTrayRow: {
+    paddingVertical: 8,
+    gap: 12,
+  },
+  colorSwatch: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  colorSwatchActive: {
+    borderColor: '#1E293B',
   },
   webBottomBtnActive: {
     backgroundColor: '#0F6B45',

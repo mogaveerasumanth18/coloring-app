@@ -54,6 +54,10 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   const [canvasSize, setCanvasSize] = useState({ width: DEFAULT_CANVAS_SIZE, height: DEFAULT_CANVAS_SIZE });
   const [history, setHistory] = useState<ColoringBitmap[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  // Track last touch point to draw continuous brush lines
+  const lastPointRef = useRef<Point | null>(null);
+  // Throttle expensive PNG encodes during brush moves
+  const lastEncodeTimeRef = useRef<number>(0);
 
   const cloneBitmap = useCallback((bmp: ColoringBitmap): ColoringBitmap => {
     return {
@@ -357,37 +361,51 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       const newData = new Uint8Array(bitmap.data);
       const brushRadius = Math.max(1, Math.floor(brushWidth * Math.min(scaleX, scaleY)));
 
-      // Simple circular brush
-      for (let dy = -brushRadius; dy <= brushRadius; dy++) {
-        for (let dx = -brushRadius; dx <= brushRadius; dx++) {
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          if (distance <= brushRadius) {
-            const x = bitmapX + dx;
-            const y = bitmapY + dy;
-            
-            if (x >= 0 && x < bitmap.width && y >= 0 && y < bitmap.height) {
-              const index = (y * bitmap.width + x) * 4;
-              
-              if (selectedTool === 'eraser') {
-                // Eraser: restore to original template pixels
-                if (originalTemplate) {
-                  newData[index] = originalTemplate.data[index];
-                  newData[index + 1] = originalTemplate.data[index + 1];
-                  newData[index + 2] = originalTemplate.data[index + 2];
-                  newData[index + 3] = originalTemplate.data[index + 3];
+      // Helper to stamp a circular brush at integer coords
+      const stampAt = (cx: number, cy: number) => {
+        for (let dy = -brushRadius; dy <= brushRadius; dy++) {
+          for (let dx = -brushRadius; dx <= brushRadius; dx++) {
+            const distance = dx * dx + dy * dy;
+            if (distance <= brushRadius * brushRadius) {
+              const x = cx + dx;
+              const y = cy + dy;
+              if (x >= 0 && x < bitmap.width && y >= 0 && y < bitmap.height) {
+                const index = (y * bitmap.width + x) * 4;
+                if (selectedTool === 'eraser') {
+                  if (originalTemplate) {
+                    newData[index] = originalTemplate.data[index];
+                    newData[index + 1] = originalTemplate.data[index + 1];
+                    newData[index + 2] = originalTemplate.data[index + 2];
+                    newData[index + 3] = originalTemplate.data[index + 3];
+                  }
+                } else {
+                  const [r, g, b, a] = hexToRgba(selectedColor);
+                  newData[index] = r;
+                  newData[index + 1] = g;
+                  newData[index + 2] = b;
+                  newData[index + 3] = a;
                 }
-              } else {
-                // Brush: paint with selected color
-                const [r, g, b, a] = hexToRgba(selectedColor);
-                newData[index] = r;
-                newData[index + 1] = g;
-                newData[index + 2] = b;
-                newData[index + 3] = a;
               }
             }
           }
         }
+      };
+
+      // Draw a continuous line from last point to the new point
+      const prev = lastPointRef.current;
+      if (!prev) {
+        stampAt(bitmapX, bitmapY);
+      } else {
+        const dx = bitmapX - prev.x;
+        const dy = bitmapY - prev.y;
+        const steps = Math.max(Math.abs(dx), Math.abs(dy));
+        for (let i = 0; i <= steps; i++) {
+          const x = Math.round(prev.x + (dx * i) / (steps || 1));
+          const y = Math.round(prev.y + (dy * i) / (steps || 1));
+          stampAt(x, y);
+        }
       }
+      lastPointRef.current = { x: bitmapX, y: bitmapY };
 
       const newBitmap: ColoringBitmap = {
         width: bitmap.width,
@@ -396,7 +414,12 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       };
 
       setBitmap(newBitmap);
-      await updateDataUrl(newBitmap);
+      // Throttle PNG encoding while moving to keep UI smooth
+      const now = Date.now();
+      if (now - lastEncodeTimeRef.current > 80) {
+        lastEncodeTimeRef.current = now;
+        await updateDataUrl(newBitmap);
+      }
     } catch (error) {
       console.error('❌ Error during brush stroke:', error);
     }
@@ -412,6 +435,13 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       if (selectedTool === 'bucket') {
         performFloodFill(locationX, locationY);
       } else if (selectedTool === 'brush' || selectedTool === 'eraser') {
+        // Start a new stroke
+        const scaleX = (bitmap?.width || 1) / canvasSize.width;
+        const scaleY = (bitmap?.height || 1) / canvasSize.height;
+        lastPointRef.current = {
+          x: Math.floor(locationX * scaleX),
+          y: Math.floor(locationY * scaleY),
+        };
         performBrushStroke(locationX, locationY);
       }
     },
@@ -423,9 +453,12 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       }
     },
 
-    onPanResponderRelease: () => {
+    onPanResponderRelease: async () => {
       if (bitmap && (selectedTool === 'brush' || selectedTool === 'eraser')) {
         saveToHistory(bitmap);
+        lastPointRef.current = null;
+        // Ensure final high-quality encode when stroke ends
+        await updateDataUrl(bitmap);
       }
     },
   });
@@ -463,13 +496,6 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
             <Text style={styles.placeholderText}>Loading template...</Text>
           </View>
         )}
-      </View>
-
-      <View style={styles.info}>
-        <Text style={styles.infoText}>
-          Tool: {selectedTool} | Color: {selectedColor}
-          {!isInitialized && ' | Loading...'}
-        </Text>
       </View>
     </View>
   );
