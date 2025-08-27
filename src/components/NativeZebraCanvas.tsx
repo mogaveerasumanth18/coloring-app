@@ -2,17 +2,19 @@ import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } 
 import {
   Alert,
   Dimensions,
-  Image,
   PanResponder,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import * as FileSystem from 'expo-file-system';
 import { encode as btoa, decode as atob } from 'base-64';
 import * as UPNG from 'upng-js';
 
-import { ZebraFloodFill } from '../utils/ZebraFloodFill';
+// We previously used ZebraFloodFill, but Android was leaking through anti-aliased lines.
+// We'll compute a boundary mask once and run a mask-aware flood fill locally.
+// import { ZebraFloodFill } from '../utils/ZebraFloodFill';
 
 interface Point {
   x: number;
@@ -58,6 +60,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   const lastPointRef = useRef<Point | null>(null);
   // Throttle expensive PNG encodes during brush moves
   const lastEncodeTimeRef = useRef<number>(0);
+  // Precomputed boundary mask (1 = boundary/outline, 0 = fillable)
+  const boundaryMaskRef = useRef<Uint8Array | null>(null);
 
   const cloneBitmap = useCallback((bmp: ColoringBitmap): ColoringBitmap => {
     return {
@@ -223,7 +227,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         }
       }
 
-      const newBitmap: ColoringBitmap = {
+  const newBitmap: ColoringBitmap = {
         width: finalWidth,
         height: finalHeight,
         data: scaledImageData,
@@ -232,6 +236,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       setBitmap(newBitmap);
       setOriginalTemplate(cloneBitmap(newBitmap)); // Store original template for eraser
       setCanvasSize({ width: finalWidth, height: finalHeight });
+  // Build a robust boundary mask from the loaded template
+  boundaryMaskRef.current = computeBoundaryMask(newBitmap);
       await updateDataUrl(newBitmap);
       
       // Save initial state to history
@@ -293,6 +299,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     setOriginalTemplate(cloneBitmap(fallbackBitmap)); // Store original template for eraser
     // Use provided dimensions for fullscreen mode
     setCanvasSize({ width: templateWidth, height: templateHeight });
+  // Build boundary mask for fallback as well
+  boundaryMaskRef.current = computeBoundaryMask(fallbackBitmap);
     await updateDataUrl(fallbackBitmap);
     
     // Save initial state to history
@@ -303,50 +311,144 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     console.log('✅ Created fallback template');
   }, [width, height, updateDataUrl, cloneBitmap]);
 
-  const performFloodFill = useCallback(async (touchX: number, touchY: number) => {
-    if (!bitmap || !isInitialized) return;
+  const performFloodFill = useCallback(
+    async (touchX: number, touchY: number) => {
+      if (!bitmap || !isInitialized) return;
 
-    try {
-      // Convert touch coordinates to bitmap coordinates
-      const scaleX = bitmap.width / canvasSize.width;
-      const scaleY = bitmap.height / canvasSize.height;
-      const bitmapX = Math.floor(touchX * scaleX);
-      const bitmapY = Math.floor(touchY * scaleY);
+      try {
+        // Convert touch coordinates to bitmap coordinates
+        const scaleX = bitmap.width / canvasSize.width;
+        const scaleY = bitmap.height / canvasSize.height;
+        let sx = Math.floor(touchX * scaleX);
+        let sy = Math.floor(touchY * scaleY);
 
-      console.log(`🪣 Flood filling at bitmap coords (${bitmapX}, ${bitmapY}) with color ${selectedColor}`);
+        const mask = boundaryMaskRef.current;
+        if (!mask) {
+          console.warn('performFloodFill: missing boundary mask, building now.');
+          boundaryMaskRef.current = computeBoundaryMask(bitmap);
+        }
 
-      // Create a copy of the bitmap data
-      const newData = new Uint8ClampedArray(bitmap.data);
-      
-      // Perform flood fill using ZebraFloodFill
-      const fillColor = ZebraFloodFill.hexToArgb(selectedColor);
-      const success = ZebraFloodFill.floodFillRGBA(
-        newData,
-        bitmap.width,
-        bitmap.height,
-        bitmapX,
-        bitmapY,
-        fillColor
-      );
-
-      if (success) {
-        const newBitmap: ColoringBitmap = {
-          width: bitmap.width,
-          height: bitmap.height,
-          data: new Uint8Array(newData),
+        // If tapped on a boundary, nudge to nearest fillable pixel within small radius
+        const isBoundaryAt = (x: number, y: number) => {
+          if (!boundaryMaskRef.current) return false;
+          if (x < 0 || y < 0 || x >= bitmap.width || y >= bitmap.height) return true;
+          return boundaryMaskRef.current[y * bitmap.width + x] === 1;
         };
 
-        setBitmap(newBitmap);
-        await updateDataUrl(newBitmap);
-        saveToHistory(newBitmap);
-        console.log('✅ Flood fill successful');
-      } else {
-        console.log('⚠️ Flood fill had no effect');
+        if (isBoundaryAt(sx, sy)) {
+          let found = false;
+          search: for (let r = 1; r <= 3; r++) {
+            for (let dy = -r; dy <= r; dy++) {
+              for (let dx = -r; dx <= r; dx++) {
+                const nx = sx + dx;
+                const ny = sy + dy;
+                if (
+                  nx >= 0 && ny >= 0 && nx < bitmap.width && ny < bitmap.height &&
+                  !isBoundaryAt(nx, ny)
+                ) {
+                  sx = nx;
+                  sy = ny;
+                  found = true;
+                  break search;
+                }
+              }
+            }
+          }
+          if (!found) return; // nowhere to fill
+        }
+
+        console.log(`🪣 Flood filling at bitmap coords (${sx}, ${sy}) with color ${selectedColor}`);
+
+        // Prepare new buffer and read target (seed) color
+        const newData = new Uint8Array(bitmap.data);
+        const idx = (sy * bitmap.width + sx) * 4;
+        const targetR = newData[idx];
+        const targetG = newData[idx + 1];
+        const targetB = newData[idx + 2];
+        const targetA = newData[idx + 3];
+
+        // Selected color RGBA
+        const [fillR, fillG, fillB, fillA] = hexToRgba(selectedColor);
+
+        // If already similar to fill color, no-op
+        const colorClose = (r: number, g: number, b: number, a: number) => {
+          const tol = 10;
+          return (
+            Math.abs(r - fillR) <= tol &&
+            Math.abs(g - fillG) <= tol &&
+            Math.abs(b - fillB) <= tol &&
+            Math.abs(a - fillA) <= tol
+          );
+        };
+        if (colorClose(targetR, targetG, targetB, targetA)) {
+          console.log('⚠️ Target already similar to fill color');
+          return;
+        }
+
+        // Local BFS flood fill that respects boundary mask and color tolerance
+        const q: Array<{ x: number; y: number }> = [{ x: sx, y: sy }];
+        const visited = new Uint8Array(bitmap.width * bitmap.height);
+        const withinTol = (x: number, y: number) => {
+          const i = (y * bitmap.width + x) * 4;
+          const r = newData[i];
+          const g = newData[i + 1];
+          const b = newData[i + 2];
+          const a = newData[i + 3];
+          const tol = 20; // a bit more forgiving than default to avoid speckles
+          return (
+            Math.abs(r - targetR) <= tol &&
+            Math.abs(g - targetG) <= tol &&
+            Math.abs(b - targetB) <= tol &&
+            Math.abs(a - targetA) <= tol
+          );
+        };
+
+        let filled = 0;
+        while (q.length) {
+          const { x, y } = q.shift()!;
+          if (x < 0 || y < 0 || x >= bitmap.width || y >= bitmap.height) continue;
+          const mIndex = y * bitmap.width + x;
+          if (visited[mIndex]) continue;
+          visited[mIndex] = 1;
+          // Respect boundary mask
+          if (boundaryMaskRef.current && boundaryMaskRef.current[mIndex] === 1) continue;
+          // Keep to similar color region
+          if (!withinTol(x, y)) continue;
+
+          // Paint pixel
+          const pi = mIndex * 4;
+          newData[pi] = fillR;
+          newData[pi + 1] = fillG;
+          newData[pi + 2] = fillB;
+          newData[pi + 3] = fillA;
+          filled++;
+
+          // 4-way neighbors
+          q.push({ x: x + 1, y });
+          q.push({ x: x - 1, y });
+          q.push({ x, y: y + 1 });
+          q.push({ x, y: y - 1 });
+        }
+
+        if (filled > 0) {
+          const newBitmap: ColoringBitmap = {
+            width: bitmap.width,
+            height: bitmap.height,
+            data: newData,
+          };
+          setBitmap(newBitmap);
+          await updateDataUrl(newBitmap);
+          saveToHistory(newBitmap);
+          console.log(`✅ Flood fill successful, pixels filled: ${filled}`);
+        } else {
+          console.log('⚠️ Flood fill had no effect');
+        }
+      } catch (error) {
+        console.error('❌ Error during flood fill:', error);
       }
-    } catch (error) {
-      console.error('❌ Error during flood fill:', error);
-    }
-  }, [bitmap, isInitialized, canvasSize, selectedColor, updateDataUrl, saveToHistory]);
+    },
+    [bitmap, isInitialized, canvasSize, selectedColor, hexToRgba, updateDataUrl, saveToHistory]
+  );
 
   const performBrushStroke = useCallback(async (touchX: number, touchY: number) => {
     if (!bitmap || !isInitialized) return;
@@ -414,12 +516,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       };
 
       setBitmap(newBitmap);
-      // Throttle PNG encoding while moving to keep UI smooth
-      const now = Date.now();
-      if (now - lastEncodeTimeRef.current > 80) {
-        lastEncodeTimeRef.current = now;
-        await updateDataUrl(newBitmap);
-      }
+  // Defer PNG encode to stroke end; keep bitmap in memory to avoid flashing
     } catch (error) {
       console.error('❌ Error during brush stroke:', error);
     }
@@ -500,6 +597,56 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     </View>
   );
 });
+
+// Build a robust boundary/outline mask for a given bitmap.
+// 1 indicates boundary; 0 indicates fillable.
+function computeBoundaryMask(bmp: ColoringBitmap): Uint8Array {
+  const { width, height, data } = bmp;
+  const mask = new Uint8Array(width * height);
+
+  // First pass: threshold by luma/minRGB and alpha
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
+      const luma = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+      const minRGB = Math.min(r, g, b);
+      const isDarkLine = (a >= 180) && (minRGB <= 80 || luma <= 120);
+      if (isDarkLine) {
+        mask[y * width + x] = 1;
+      }
+    }
+  }
+
+  // Simple dilation to close tiny anti-aliased gaps
+  const dilate = (src: Uint8Array): Uint8Array => {
+    const out: Uint8Array = new Uint8Array(src.length);
+    out.set(src);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (src[y * width + x] !== 1) continue;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx >= 0 && ny >= 0 && nx < width && ny < height) {
+              out[ny * width + nx] = 1;
+            }
+          }
+        }
+      }
+    }
+    return out;
+  };
+
+  let out: Uint8Array = mask;
+  out = dilate(out);
+  out = dilate(out);
+  return out;
+}
 
 const styles = StyleSheet.create({
   container: {

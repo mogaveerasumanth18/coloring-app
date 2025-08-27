@@ -60,6 +60,7 @@ export default function IntegratedColoringBookApp({
   const [zoom, setZoom] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showColorTray, setShowColorTray] = useState(false);
+  const [showZoomUi, setShowZoomUi] = useState(false);
   const webSliderTrackRef = useRef<View>(null);
   const [webSliderTrackWidth, setWebSliderTrackWidth] = useState(0);
   const bitmapCanvasRef = useRef<any>(null);
@@ -308,7 +309,14 @@ export default function IntegratedColoringBookApp({
   {/* Removed status label per UX request */}
 
         {/* Zoom controls - Right edge floating */}
-        <View style={styles.floatingZoomControls}>
+        <View
+          style={[styles.floatingZoomControls, { opacity: showZoomUi ? 1 : 0.25 }]}
+          onTouchStart={() => setShowZoomUi(true)}
+          onTouchEnd={() => setShowZoomUi(false)}
+          {...(Platform.OS === 'web'
+            ? { onMouseEnter: () => setShowZoomUi(true), onMouseLeave: () => setShowZoomUi(false) }
+            : {})}
+        >
           <TouchableOpacity style={styles.modernZoomButton} onPress={() => setZoom(prev => Math.min(prev + 0.25, 3))}>
             <Feather name="plus" size={20} color="#FFFFFF" />
           </TouchableOpacity>
@@ -403,8 +411,8 @@ export default function IntegratedColoringBookApp({
               minimumValue={2}
               maximumValue={20}
               value={brushSize}
-              onValueChange={setBrushSize}
               step={1}
+              onSlidingComplete={(v: number) => setBrushSize(v)}
               minimumTrackTintColor="#6366f1"
               maximumTrackTintColor="#E2E8F0"
               thumbTintColor="#6366f1"
