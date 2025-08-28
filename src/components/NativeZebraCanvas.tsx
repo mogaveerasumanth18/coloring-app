@@ -31,6 +31,8 @@ interface NativeZebraCanvasProps {
   onColoringComplete?: (imageData: string) => void;
   // When false, disable all drawing interactions (used for Move mode)
   interactionEnabled?: boolean;
+  // Optional: when provided on first mount, restore canvas from this PNG data URL instead of template
+  initialDataUrl?: string;
 }
 
 interface ColoringBitmap {
@@ -51,6 +53,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   height = DEFAULT_CANVAS_SIZE,
   onColoringComplete,
   interactionEnabled = true,
+  initialDataUrl,
 }, ref) => {
   const [bitmap, setBitmap] = useState<ColoringBitmap | null>(null);
   const [originalTemplate, setOriginalTemplate] = useState<ColoringBitmap | null>(null);
@@ -165,16 +168,17 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   }), [historyIndex, history, bitmap, cloneBitmap, updateDataUrl, saveToHistory]);
 
   const loadTemplate = useCallback(async () => {
-    if (!templateUri) return;
+    const sourceUri = initialDataUrl || templateUri;
+    if (!sourceUri) return;
 
     try {
       let imageData: Uint8Array;
       let imgWidth: number;
       let imgHeight: number;
 
-      if (templateUri.startsWith('data:')) {
+      if (sourceUri.startsWith('data:')) {
         // Handle data URL
-        const base64Data = templateUri.split(',')[1];
+        const base64Data = sourceUri.split(',')[1];
         const binaryString = atob(base64Data);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
@@ -187,7 +191,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         imgHeight = decoded.height;
       } else {
         // Handle file URI
-        const base64Data = await FileSystem.readAsStringAsync(templateUri, {
+        const base64Data = await FileSystem.readAsStringAsync(sourceUri, {
           encoding: FileSystem.EncodingType.Base64,
         });
         
@@ -258,7 +262,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       console.error('❌ Failed to load template:', error);
       await createFallbackTemplate();
     }
-  }, [templateUri, width, height, updateDataUrl, cloneBitmap]);
+  }, [templateUri, initialDataUrl, width, height, updateDataUrl, cloneBitmap]);
 
   const createFallbackTemplate = useCallback(async () => {
     const templateWidth = width || DEFAULT_CANVAS_SIZE;

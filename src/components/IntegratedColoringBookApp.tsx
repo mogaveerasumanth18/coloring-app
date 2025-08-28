@@ -65,6 +65,8 @@ export default function IntegratedColoringBookApp({
   const [webSliderTrackWidth, setWebSliderTrackWidth] = useState(0);
   const bitmapCanvasRef = useRef<any>(null);
   const captureViewRef = useRef<View>(null);
+  // Persist canvas across modal toggles/remounts
+  const [canvasSnapshot, setCanvasSnapshot] = useState<string | null>(null);
   
   // Gesture handling for pan and zoom
   const scale = useSharedValue(1);
@@ -284,7 +286,7 @@ export default function IntegratedColoringBookApp({
       );
       return;
     }
-    setCurrentTemplate({
+  setCurrentTemplate({
       svgData: null,
       fileName,
       bitmapUri,
@@ -292,6 +294,8 @@ export default function IntegratedColoringBookApp({
       height: 480,
       type: 'png',
     });
+  // New template => clear previous snapshot
+  setCanvasSnapshot(null);
     setActiveTab('color');
   };
 
@@ -338,7 +342,7 @@ export default function IntegratedColoringBookApp({
         {/* Canvas */}
         {currentTemplate?.bitmapUri ? (
           Platform.OS === 'web' ? (
-            <PinchGestureHandler onGestureEvent={pinchHandler}>
+      <PinchGestureHandler onGestureEvent={pinchHandler}>
               <Animated.View style={styles.modernCanvasContainer}>
                 <PanGestureHandler onGestureEvent={panHandler}>
                   <Animated.View style={[animatedStyle, { flex: 1 }]}>
@@ -365,10 +369,11 @@ export default function IntegratedColoringBookApp({
                     selectedColor={selectedColor}
                     selectedTool={selectedTool === 'move' ? 'brush' : selectedTool}
                     brushWidth={brushSize}
-                    onColoringComplete={() => {}}
+        onColoringComplete={(uri: string) => setCanvasSnapshot(uri)}
                     width={screenWidth - 32}
                     height={(screenWidth - 32) * 0.8}
                     interactionEnabled={selectedTool !== 'move'}
+        initialDataUrl={canvasSnapshot ?? undefined}
                   />
                 </Animated.View>
               </PanGestureHandler>
@@ -559,12 +564,22 @@ export default function IntegratedColoringBookApp({
           <TouchableOpacity style={styles.colorTrayBackdrop} activeOpacity={1} onPress={() => setShowColorTray(false)} />
           <View style={styles.centerModal}>
             <Text style={styles.colorTrayTitle}>Pick a color</Text>
-            <View style={styles.gridPalette}>
-              {colors.map((c) => (
-                <TouchableOpacity key={c} onPress={() => { setSelectedColor(c); setShowColorTray(false); }}
-                  style={[styles.gridSwatch, { backgroundColor: c }, selectedColor === c && styles.centerModalSwatchActive]} />
-              ))}
-            </View>
+            {/* Force exactly three rows of swatches */}
+            {[0,1,2].map((rowIdx) => {
+              const perRow = Math.ceil(colors.length / 3);
+              const row = colors.slice(rowIdx * perRow, (rowIdx + 1) * perRow);
+              return (
+                <View key={rowIdx} style={styles.rowPalette}>
+                  {row.map((c) => (
+                    <TouchableOpacity
+                      key={`${rowIdx}-${c}`}
+                      onPress={() => { setSelectedColor(c); setShowColorTray(false); }}
+                      style={[styles.rowSwatch, { backgroundColor: c }, selectedColor === c && styles.centerModalSwatchActive]}
+                    />
+                  ))}
+                </View>
+              );
+            })}
             <TouchableOpacity style={styles.colorWheelBtn} onPress={() => Alert.alert('Color wheel', 'Coming soon!')}>
               <Feather name="aperture" size={16} color="#fff" />
               <Text style={styles.colorWheelText}>Open color wheel</Text>
@@ -1451,6 +1466,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   gridSwatch: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  // Explicit 3-row palette layout
+  rowPalette: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    gap: 12,
+  },
+  rowSwatch: {
     width: 44,
     height: 44,
     borderRadius: 22,
