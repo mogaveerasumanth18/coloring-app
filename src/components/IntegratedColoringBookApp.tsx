@@ -1,4 +1,4 @@
-import { Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Feather, Ionicons, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -396,14 +396,15 @@ export default function IntegratedColoringBookApp({
       <View style={[styles.bottomToolbar, { paddingBottom: insets.bottom + 16 }]}>
         {/* Tools Section - Top row */}
         <View style={styles.toolsRow}>
+          {/* Eraser replaces Pen */}
           <TouchableOpacity
-            style={[styles.toolButton, selectedTool === 'brush' && styles.activeToolButton]}
-            onPress={() => setSelectedTool('brush')}
+            style={[styles.toolButton, selectedTool === 'eraser' && styles.activeToolButton]}
+            onPress={() => setSelectedTool('eraser')}
           >
-            <Feather name="edit-3" size={24} color={selectedTool === 'brush' ? '#FFFFFF' : '#64748B'} />
-            <Text style={[styles.toolLabel, selectedTool === 'brush' && styles.activeToolLabel]}>Pen</Text>
+            <MaterialCommunityIcons name="eraser" size={24} color={selectedTool === 'eraser' ? '#FFFFFF' : '#64748B'} />
+            <Text style={[styles.toolLabel, selectedTool === 'eraser' && styles.activeToolLabel]}>Eraser</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.toolButton, selectedTool === 'brush' && styles.activeToolButton]}
             onPress={() => setSelectedTool('brush')}
@@ -580,39 +581,44 @@ export default function IntegratedColoringBookApp({
         <View style={[styles.colorTrayOverlay, styles.centerOverlay]}>
           <TouchableOpacity style={styles.colorTrayBackdrop} activeOpacity={1} onPress={() => setShowColorTray(false)} />
           <View style={styles.centerModal}>
-            <Text style={styles.colorTrayTitle}>Pick a color</Text>
-            {/* Force exactly three rows of swatches */}
-            {[0,1,2].map((rowIdx) => {
-              const perRow = Math.ceil(colors.length / 3);
-              const row = colors.slice(rowIdx * perRow, (rowIdx + 1) * perRow);
-              return (
-                <View key={rowIdx} style={styles.rowPalette}>
-                  {row.map((c) => (
-                    <TouchableOpacity
-                      key={`${rowIdx}-${c}`}
-                      onPress={() => { setSelectedColor(c); setShowColorTray(false); }}
-                      style={[styles.rowSwatch, { backgroundColor: c }, selectedColor === c && styles.centerModalSwatchActive]}
-                    />
-                  ))}
-                </View>
-              );
-            })}
-            {/* Embedded color wheel */}
-            <View style={styles.wheelContainer}>
-              <ColorPicker
-                value={selectedColor}
-                onComplete={(c: any) => setSelectedColor(c.hex)}
-                style={{ width: '100%' }}
-              >
-                <Preview hideInitialColor hideText style={{ marginBottom: 8 }} />
-                <Panel3 style={{ height: 180, borderRadius: 12 }} />
-                <HueSlider style={{ marginTop: 10 }} />
-                <BrightnessSlider style={{ marginTop: 10 }} />
-              </ColorPicker>
-            </View>
-            <TouchableOpacity style={styles.centerModalClose} onPress={() => setShowColorTray(false)}>
-              <Text style={styles.centerModalCloseText}>Close</Text>
-            </TouchableOpacity>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 8 }}
+            >
+              <Text style={styles.colorTrayTitle}>Pick a color</Text>
+              {/* Three neat rows of swatches with larger touch targets */}
+              {[0,1,2].map((rowIdx) => {
+                const perRow = Math.ceil(colors.length / 3);
+                const row = colors.slice(rowIdx * perRow, (rowIdx + 1) * perRow);
+                return (
+                  <View key={rowIdx} style={styles.rowPalette}>
+                    {row.map((c) => (
+                      <TouchableOpacity
+                        key={`${rowIdx}-${c}`}
+                        onPress={() => { setSelectedColor(c); setShowColorTray(false); }}
+                        style={[styles.rowSwatch, { backgroundColor: c }, selectedColor === c && styles.centerModalSwatchActive]}
+                      />
+                    ))}
+                  </View>
+                );
+              })}
+              {/* Compact color wheel section */}
+              <View style={styles.wheelContainer}>
+                <ColorPicker
+                  value={selectedColor}
+                  onComplete={(c: any) => setSelectedColor(c.hex)}
+                  style={{ width: '100%' }}
+                >
+                  <Preview hideInitialColor hideText style={{ marginBottom: 10 }} />
+                  <Panel3 style={{ height: screenWidth < 380 ? 150 : 180, borderRadius: 12 }} />
+                  <HueSlider style={{ marginTop: 12 }} />
+                  <BrightnessSlider style={{ marginTop: 12, marginBottom: 4 }} />
+                </ColorPicker>
+              </View>
+              <TouchableOpacity style={styles.centerModalClose} onPress={() => setShowColorTray(false)}>
+                <Text style={styles.centerModalCloseText}>Close</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       )}

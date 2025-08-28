@@ -357,7 +357,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
         if (isBoundaryAt(sx, sy)) {
           let found = false;
-          search: for (let r = 1; r <= 3; r++) {
+          // Slightly larger search radius to find a fillable pixel adjacent to outlines
+          search: for (let r = 1; r <= 5; r++) {
             for (let dy = -r; dy <= r; dy++) {
               for (let dx = -r; dx <= r; dx++) {
                 const nx = sx + dx;
@@ -453,31 +454,53 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         }
 
         if (filled > 0) {
-          // Edge coat: paint a 1px halo around the filled region up to (but not onto) strong boundaries
-    const expanded = boundaryMaskRef.current!; // safe after ensuring above
-    const strong = strongBoundaryMaskRef.current!;
-          for (let y = 0; y < bitmap.height; y++) {
-            for (let x = 0; x < bitmap.width; x++) {
-              const idx1 = y * bitmap.width + x;
-              if (filledMask[idx1] !== 1) continue;
-              for (let dy = -1; dy <= 1; dy++) {
-                for (let dx = -1; dx <= 1; dx++) {
-                  if (dx === 0 && dy === 0) continue;
-                  const nx = x + dx;
-                  const ny = y + dy;
-                  if (nx < 0 || ny < 0 || nx >= bitmap.width || ny >= bitmap.height) continue;
-                  const nIdx = ny * bitmap.width + nx;
-      // Protect true dark outlines, but allow coating the anti-aliased rim (expanded-only)
-      if (strong[nIdx] === 1) continue;
-      if (filledMask[nIdx] === 1) continue;
-                  // Paint neighbor
-                  const pi2 = nIdx * 4;
-                  newData[pi2] = fillR;
-                  newData[pi2 + 1] = fillG;
-                  newData[pi2 + 2] = fillB;
-                  newData[pi2 + 3] = fillA;
+          // Edge coat fix: dilate the filled region by 2 passes (radius≈2) but never onto strong boundaries
+          // and avoid obviously dark pixels (likely outline AA) using a brightness check.
+          const strong = strongBoundaryMaskRef.current!; // strict boundary mask
+          const widthW = bitmap.width;
+          const heightH = bitmap.height;
+          const isBright = (idxPix: number) => {
+            const ri = idxPix * 4;
+            const r = newData[ri];
+            const g = newData[ri + 1];
+            const b = newData[ri + 2];
+            // Luma threshold tuned to keep away from dark outline greys
+            const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            return luma > 115; // allow painting on light rim
+          };
+
+          // Two dilation iterations
+          for (let pass = 0; pass < 2; pass++) {
+            const toPaint: number[] = [];
+            for (let y = 0; y < heightH; y++) {
+              for (let x = 0; x < widthW; x++) {
+                const idx1 = y * widthW + x;
+                if (filledMask[idx1] === 1) continue; // already painted
+                if (strong[idx1] === 1) continue; // never cross strong boundaries
+                // check 8-neighbors for filled
+                let neighborFilled = false;
+                for (let dy = -1; dy <= 1 && !neighborFilled; dy++) {
+                  for (let dx = -1; dx <= 1 && !neighborFilled; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (nx < 0 || ny < 0 || nx >= widthW || ny >= heightH) continue;
+                    const nIdx = ny * widthW + nx;
+                    if (filledMask[nIdx] === 1) neighborFilled = true;
+                  }
                 }
+                if (!neighborFilled) continue;
+                if (!isBright(idx1)) continue; // skip darker pixels near outline
+                toPaint.push(idx1);
               }
+            }
+            for (const nIdx of toPaint) {
+              const pi2 = nIdx * 4;
+              newData[pi2] = fillR;
+              newData[pi2 + 1] = fillG;
+              newData[pi2 + 2] = fillB;
+              newData[pi2 + 3] = fillA;
+              filledMask[nIdx] = 1;
             }
           }
 
