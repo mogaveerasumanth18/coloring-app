@@ -68,6 +68,7 @@
     "react-native-view-shot": "^4.0.3",
     "react-native-web": "~0.20.0",
     "react-query-kit": "^3.3.2",
+    "reanimated-color-picker": "^4.1.0",
     "tailwind-merge": "^3.3.1",
     "tailwind-variants": "^2.1.0",
     "upng-js": "^2.1.0",

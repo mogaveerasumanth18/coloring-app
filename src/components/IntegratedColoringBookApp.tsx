@@ -15,7 +15,9 @@ import {
   PanGestureHandler,
   PinchGestureHandler,
   State,
+  NativeViewGestureHandler,
 } from 'react-native-gesture-handler';
+import ColorPicker, { Panel3, HueSlider, BrightnessSlider, Preview } from 'reanimated-color-picker';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -67,6 +69,8 @@ export default function IntegratedColoringBookApp({
   const captureViewRef = useRef<View>(null);
   // Persist canvas across modal toggles/remounts
   const [canvasSnapshot, setCanvasSnapshot] = useState<string | null>(null);
+  // Gesture/slider helpers
+  const sliderGestureRef = useRef<any>(null);
   
   // Gesture handling for pan and zoom
   const scale = useSharedValue(1);
@@ -344,7 +348,7 @@ export default function IntegratedColoringBookApp({
           Platform.OS === 'web' ? (
       <PinchGestureHandler onGestureEvent={pinchHandler}>
               <Animated.View style={styles.modernCanvasContainer}>
-                <PanGestureHandler onGestureEvent={panHandler}>
+                <PanGestureHandler onGestureEvent={panHandler} simultaneousHandlers={sliderGestureRef}>
                   <Animated.View style={[animatedStyle, { flex: 1 }]}>
                     <WorkingColoringCanvas
                       ref={bitmapCanvasRef}
@@ -361,7 +365,7 @@ export default function IntegratedColoringBookApp({
             // On native, pan with two fingers to avoid conflicts with drawing; zoom via top bar
             <View ref={captureViewRef as any} style={styles.modernCanvasContainer}>
               {/* One-finger pan when in Move mode; otherwise require two fingers so drawing remains single-finger */}
-              <PanGestureHandler onGestureEvent={panHandler} minPointers={selectedTool === 'move' ? 1 : 2}>
+              <PanGestureHandler onGestureEvent={panHandler} minPointers={selectedTool === 'move' ? 1 : 2} simultaneousHandlers={sliderGestureRef}>
                 <Animated.View style={[animatedStyle, { flex: 1 }]}>
                   <NativeZebraCanvas
                     ref={bitmapCanvasRef}
@@ -424,6 +428,15 @@ export default function IntegratedColoringBookApp({
             <Feather name="move" size={24} color={selectedTool === 'move' ? '#FFFFFF' : '#64748B'} />
             <Text style={[styles.toolLabel, selectedTool === 'move' && styles.activeToolLabel]}>Move</Text>
           </TouchableOpacity>
+
+          {/* Color picker button available for any tool */}
+          <TouchableOpacity
+            style={[styles.toolButton, showColorTray && styles.activeToolButton]}
+            onPress={() => setShowColorTray(true)}
+          >
+            <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: selectedColor, borderWidth: 2, borderColor: '#e2e8f0' }} />
+            <Text style={[styles.toolLabel, showColorTray && styles.activeToolLabel]}>Color</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Size Slider - Only show for pen/brush tools */}
@@ -431,17 +444,21 @@ export default function IntegratedColoringBookApp({
           <View style={styles.sizeSliderRow}>
             <Text style={styles.sizeLabel}>Size: {brushSize}px</Text>
             <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-              <Slider
-                style={styles.sizeSlider}
-                minimumValue={2}
-                maximumValue={40}
-                value={brushSize}
-                step={1}
-                onValueChange={(v: number) => setBrushSize(Math.round(v))}
-                minimumTrackTintColor="#6366f1"
-                maximumTrackTintColor="#E2E8F0"
-                thumbTintColor="#6366f1"
-              />
+              <NativeViewGestureHandler ref={sliderGestureRef}>
+                <View style={{ flex: 1 }}>
+                  <Slider
+                    style={styles.sizeSlider}
+                    minimumValue={2}
+                    maximumValue={40}
+                    value={brushSize}
+                    step={1}
+                    onValueChange={(v: number) => setBrushSize(Math.round(v))}
+                    minimumTrackTintColor="#6366f1"
+                    maximumTrackTintColor="#E2E8F0"
+                    thumbTintColor="#6366f1"
+                  />
+                </View>
+              </NativeViewGestureHandler>
               <View style={{ width: 32, alignItems: 'center' }}>
                 <View style={{ width: Math.min(brushSize, 28), height: Math.min(brushSize, 28), borderRadius: 999, backgroundColor: selectedColor, borderWidth: 1, borderColor: '#CBD5E1' }} />
               </View>
@@ -580,10 +597,19 @@ export default function IntegratedColoringBookApp({
                 </View>
               );
             })}
-            <TouchableOpacity style={styles.colorWheelBtn} onPress={() => Alert.alert('Color wheel', 'Coming soon!')}>
-              <Feather name="aperture" size={16} color="#fff" />
-              <Text style={styles.colorWheelText}>Open color wheel</Text>
-            </TouchableOpacity>
+            {/* Embedded color wheel */}
+            <View style={styles.wheelContainer}>
+              <ColorPicker
+                value={selectedColor}
+                onComplete={(c: any) => setSelectedColor(c.hex)}
+                style={{ width: '100%' }}
+              >
+                <Preview hideInitialColor hideText style={{ marginBottom: 8 }} />
+                <Panel3 style={{ height: 180, borderRadius: 12 }} />
+                <HueSlider style={{ marginTop: 10 }} />
+                <BrightnessSlider style={{ marginTop: 10 }} />
+              </ColorPicker>
+            </View>
             <TouchableOpacity style={styles.centerModalClose} onPress={() => setShowColorTray(false)}>
               <Text style={styles.centerModalCloseText}>Close</Text>
             </TouchableOpacity>
@@ -597,13 +623,11 @@ export default function IntegratedColoringBookApp({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f4ff', // Light blue gradient background
+    backgroundColor: '#EEF2FF',
   },
-  
-  // Modern Mobile-Friendly Layout Styles
   modernContainer: {
     flex: 1,
-    backgroundColor: '#f0f4ff',
+    backgroundColor: '#F3F4F6',
   },
   modernHeader: {
     height: '10%',
@@ -830,6 +854,10 @@ const styles = StyleSheet.create({
   colorsContainer: {
     paddingHorizontal: 4,
     gap: 12,
+  },
+  wheelContainer: {
+    marginTop: 8,
+    marginBottom: 12,
   },
   modernColorButton: {
     width: 40,

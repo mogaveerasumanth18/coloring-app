@@ -162,6 +162,9 @@ importers:
       react-query-kit:
         specifier: ^3.3.2
         version: 3.3.2(@tanstack/react-query@5.85.5(react@19.0.0))
+      reanimated-color-picker:
+        specifier: ^4.1.0
+        version: 4.1.0(expo@53.0.22(@babel/core@7.26.0)(@expo/metro-runtime@5.0.4(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0)))(graphql@16.8.1)(react-native-webview@13.15.0(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native-gesture-handler@2.24.0(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native-reanimated@3.17.5(@babel/core@7.26.0)(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
       tailwind-merge:
         specifier: ^3.3.1
         version: 3.3.1
@@ -5771,6 +5774,18 @@ packages:
   readdirp@3.6.0:
     resolution: {integrity: sha512-hOS089on8RduqdbhvQ5Z37A0ESjsqz6qnRcffsMU3495FuTdqSm+7bhJ29JvIOsBDEEnan5DPu9t3To9VRlMzA==}
     engines: {node: '>=8.10.0'}
+
+  reanimated-color-picker@4.1.0:
+    resolution: {integrity: sha512-XyeyhWW50quyi/C52D9LTwPEZjYh6QKMzmwz2ORo+MlUEGhq3onpodR0vdOj5ZMHQZEtWwMhOIcbpme+C9Av8A==}
+    peerDependencies:
+      expo: '>=44.0.0'
+      react: 19.0.0
+      react-native: '*'
+      react-native-gesture-handler: '>=2.0.0'
+      react-native-reanimated: ^2.0.0 || ^3.0.0
+    peerDependenciesMeta:
+      expo:
+        optional: true
 
   recyclerlistview@4.2.3:
     resolution: {integrity: sha512-STR/wj/FyT8EMsBzzhZ1l2goYirMkIgfV3gYEPxI3Kf3lOnu6f7Dryhyw7/IkQrgX5xtTcDrZMqytvteH9rL3g==}
@@ -14104,6 +14119,15 @@ snapshots:
   readdirp@3.6.0:
     dependencies:
       picomatch: 2.3.1
+
+  reanimated-color-picker@4.1.0(expo@53.0.22(@babel/core@7.26.0)(@expo/metro-runtime@5.0.4(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0)))(graphql@16.8.1)(react-native-webview@13.15.0(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native-gesture-handler@2.24.0(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native-reanimated@3.17.5(@babel/core@7.26.0)(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0):
+    dependencies:
+      react: 19.0.0
+      react-native: 0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0)
+      react-native-gesture-handler: 2.24.0(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+      react-native-reanimated: 3.17.5(@babel/core@7.26.0)(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+    optionalDependencies:
+      expo: 53.0.22(@babel/core@7.26.0)(@expo/metro-runtime@5.0.4(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0)))(graphql@16.8.1)(react-native-webview@13.15.0(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
 
   recyclerlistview@4.2.3(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0):
     dependencies:
