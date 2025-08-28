@@ -102,6 +102,13 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
       ? templates
       : templates.filter((template) => template.category === selectedCategory);
 
+  // Responsive card width (2 cols by default, 3 on wide screens)
+  const columns = screenWidth >= 1200 ? 4 : screenWidth >= 900 ? 3 : 2;
+  const horizontalPadding = 20; // templatesGrid paddingHorizontal
+  const cardMargin = 10; // templateCard marginHorizontal
+  const available = screenWidth - horizontalPadding * 2;
+  const cardWidth = Math.floor((available - cardMargin * 2 * columns) / columns);
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -158,14 +165,14 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
         style={styles.templatesScroll}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.templatesGrid}>
+    <View style={styles.templatesGrid}>
           {filteredTemplates.map((template) => (
             <TouchableOpacity
               key={template.id}
-              style={styles.templateCard}
+      style={[styles.templateCard, { width: cardWidth, marginHorizontal: cardMargin }]}
               onPress={() => handleTemplateSelect(template)}
             >
-              <View style={styles.templateImageContainer}>
+      <View style={[styles.templateImageContainer, { height: Math.round(cardWidth * 0.66) }]}>
                 <Image
                   source={{ uri: template.thumbnailUri }}
                   style={styles.templateImage}
@@ -280,22 +287,28 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   categoryScroll: {
-    maxHeight: 80,
+    maxHeight: 96,
   },
   categoryContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    alignItems: 'center',
   },
   categoryButton: {
-    marginRight: 15,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    marginHorizontal: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 2,
     borderColor: '#E0E0E0',
     alignItems: 'center',
-    minWidth: 80,
+    minWidth: 96,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
   },
   selectedCategory: {
     borderColor: '#4ECDC4',
@@ -320,14 +333,16 @@ const styles = StyleSheet.create({
   templatesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    padding: 10,
-    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingVertical: 16,
+    justifyContent: 'center',
   },
   templateCard: {
-    width: (screenWidth - 30) / 2 - 10,
+    width: (screenWidth - 60) / 2,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     marginBottom: 20,
+    marginHorizontal: 10,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: {

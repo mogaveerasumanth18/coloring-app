@@ -11,7 +11,9 @@ import {
   View,
   ScrollView,
   Modal,
+  Image,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { captureRef } from 'react-native-view-shot';
@@ -45,6 +47,9 @@ export default function FullscreenCanvas({
   onColoringComplete,
 }: FullscreenCanvasProps) {
   const [zoom, setZoom] = useState(1);
+  const MIN_ZOOM = 0.5;
+  const MAX_ZOOM = 3;
+  const clampZoom = (z: number) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
   const [colors] = useState([
     '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316', 
     '#eab308', '#22c55e', '#10b981', '#06b6d4', '#3b82f6',
@@ -55,6 +60,8 @@ export default function FullscreenCanvas({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const canvasRef = useRef<any>(null);
   const captureViewRef = useRef<View>(null);
+  const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
+  const [roundedCorners, setRoundedCorners] = useState(false);
 
   useEffect(() => {
     if (isVisible && Platform.OS !== 'web') {
@@ -71,6 +78,19 @@ export default function FullscreenCanvas({
       }
     };
   }, [isVisible]);
+
+  // Fetch template intrinsic size (for aspect-fit) when URI changes
+  useEffect(() => {
+    if (!templateUri) {
+      setTemplateSize(null);
+      return;
+    }
+    Image.getSize(
+      templateUri,
+      (w, h) => setTemplateSize({ width: w, height: h }),
+      () => setTemplateSize(null)
+    );
+  }, [templateUri]);
 
   const handleClose = async () => {
     if (Platform.OS !== 'web') {
@@ -115,46 +135,71 @@ export default function FullscreenCanvas({
 
   if (!isVisible) return null;
 
-  // Calculate optimal canvas size for fullscreen
-  const getOptimalCanvasSize = () => {
-    if (Platform.OS === 'web') {
-      return { width: screenWidth * 0.9, height: screenHeight * 0.8 };
+  // Full bleed canvas: let container flex and fill; child receives width/height via onLayout
+  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number }>({
+    width: screenWidth,
+    height: screenHeight,
+  });
+
+  const computeFit = (
+    container: { width: number; height: number },
+    content: { width: number; height: number } | null
+  ): { width: number; height: number } => {
+    if (!content || content.width === 0 || content.height === 0) {
+      return container;
+    }
+    const cw = container.width;
+    const ch = container.height;
+    const arContent = content.width / content.height;
+    const arContainer = cw / ch;
+    if (arContent > arContainer) {
+      // content wider than container
+      const width = cw;
+      const height = Math.round(cw / arContent);
+      return { width, height };
     } else {
-      // For native (landscape mode), use most of the screen with padding
-      const landscapeWidth = Math.max(screenWidth, screenHeight);
-      const landscapeHeight = Math.min(screenWidth, screenHeight);
-      
-      // Leave space for floating buttons (top: 120px, bottom: 100px)
-      const availableHeight = landscapeHeight - 220;
-      const availableWidth = landscapeWidth - 40; // 20px padding on each side
-      
-      // Maintain aspect ratio while maximizing usage of available space
-      const maxSize = Math.min(availableWidth, availableHeight);
-      
-      return { 
-        width: Math.min(maxSize, availableWidth), 
-        height: Math.min(maxSize, availableHeight) 
-      };
+      const height = ch;
+      const width = Math.round(ch * arContent);
+      return { width, height };
     }
   };
-
-  const canvasSize = getOptimalCanvasSize();
 
   return (
     <View style={styles.fullscreenContainer}>
       <SafeAreaView style={styles.safeArea}>
         {/* Full Screen Canvas */}
         <View style={styles.canvasSection}>
-          <View style={[styles.canvasContainer, canvasSize]}>
+          <View
+            style={[
+              styles.canvasContainer,
+              roundedCorners && { borderRadius: 12 },
+            ]}
+            onLayout={(e) => {
+              const { width, height } = e.nativeEvent.layout;
+              if (width && height) setCanvasSize({ width, height });
+            }}
+          >
             {(Platform.OS as any) === 'web' ? (
               templateUri ? (
-                <WorkingColoringCanvas
-                  ref={canvasRef}
-                  selectedColor={currentColor}
-                  selectedTool={currentTool}
-                  brushSize={currentBrushSize}
-                  templateUri={templateUri}
-                />
+                <View
+                  ref={captureViewRef}
+                  collapsable={false}
+                  style={{
+                    width: computeFit(canvasSize, templateSize).width,
+                    height: computeFit(canvasSize, templateSize).height,
+                    transform: [{ scale: zoom }],
+                  }}
+                >
+                  <WorkingColoringCanvas
+                    ref={canvasRef}
+                    selectedColor={currentColor}
+                    selectedTool={currentTool}
+                    brushSize={currentBrushSize}
+                    templateUri={templateUri}
+                    width={computeFit(canvasSize, templateSize).width}
+                    height={computeFit(canvasSize, templateSize).height}
+                  />
+                </View>
               ) : (
                 <View style={styles.emptyCanvas}>
                   <Text style={styles.emptyCanvasText}>Select a template to start coloring! 🎨</Text>
@@ -162,7 +207,15 @@ export default function FullscreenCanvas({
               )
             ) : (
               templateUri ? (
-                <View ref={captureViewRef} collapsable={false}>
+                <View
+                  ref={captureViewRef}
+                  collapsable={false}
+                  style={{
+                    width: computeFit(canvasSize, templateSize).width,
+                    height: computeFit(canvasSize, templateSize).height,
+                    transform: [{ scale: zoom }],
+                  }}
+                >
                   {(Platform.OS as any) === 'web' ? (
                     <ZebraColoringCanvas
                       ref={canvasRef}
@@ -180,8 +233,8 @@ export default function FullscreenCanvas({
                       selectedTool={currentTool}
                       brushWidth={currentBrushSize}
                       onColoringComplete={onColoringComplete}
-                      width={canvasSize.width}
-                      height={canvasSize.height}
+                      width={computeFit(canvasSize, templateSize).width}
+                      height={computeFit(canvasSize, templateSize).height}
                     />
                   )}
                 </View>
@@ -208,12 +261,12 @@ export default function FullscreenCanvas({
               <Text style={styles.actionButtonText}>Redo</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.actionButton} onPress={() => setZoom(prev => Math.min(prev + 0.25, 3))}>
+              <TouchableOpacity style={styles.actionButton} onPress={() => setZoom(prev => clampZoom(prev + 0.25))}>
               <Feather name="zoom-in" size={18} color="#ffffff" />
               <Text style={styles.actionButtonText}>Zoom In</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.actionButton} onPress={() => setZoom(prev => Math.max(prev - 0.25, 0.5))}>
+              <TouchableOpacity style={styles.actionButton} onPress={() => setZoom(prev => clampZoom(prev - 0.25))}>
               <Feather name="zoom-out" size={18} color="#ffffff" />
               <Text style={styles.actionButtonText}>Zoom Out</Text>
             </TouchableOpacity>
@@ -221,7 +274,35 @@ export default function FullscreenCanvas({
             <View style={styles.zoomIndicator}>
               <Text style={styles.zoomText}>{Math.round(zoom * 100)}%</Text>
             </View>
+              <TouchableOpacity style={styles.actionButton} onPress={() => setZoom(1)}>
+                <Feather name="refresh-ccw" size={18} color="#ffffff" />
+                <Text style={styles.actionButtonText}>Reset</Text>
+              </TouchableOpacity>
+            {/* Rounded corners toggle */}
+            <TouchableOpacity
+              style={[styles.actionButton, roundedCorners && styles.activeActionButton]}
+              onPress={() => setRoundedCorners((v) => !v)}
+            >
+              <Feather name="corner-right-down" size={18} color="#ffffff" />
+              <Text style={styles.actionButtonText}>{roundedCorners ? 'Rounded' : 'Square'}</Text>
+            </TouchableOpacity>
           </View>
+
+            {/* Zoom slider */}
+            <View style={styles.sliderRow}>
+              <Text style={styles.sliderLabel}>Zoom</Text>
+              <Slider
+                style={styles.zoomSlider}
+                minimumValue={MIN_ZOOM}
+                maximumValue={MAX_ZOOM}
+                value={zoom}
+                step={0.01}
+                onValueChange={(v: number) => setZoom(clampZoom(v))}
+                minimumTrackTintColor="#6366f1"
+                maximumTrackTintColor="#CBD5E1"
+                thumbTintColor="#6366f1"
+              />
+            </View>
           
           <View style={styles.actionRow}>
             {/* Second Row - Tools */}
@@ -339,16 +420,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   canvasSection: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  paddingHorizontal: 10,
+  paddingVertical: 10,
   },
   canvasContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    overflow: 'hidden',
-    maxWidth: '100%',
-    maxHeight: '100%',
+  backgroundColor: '#ffffff',
+  borderRadius: 0,
+  overflow: 'hidden',
+  width: '100%',
+  height: '100%',
+  maxWidth: '100%',
+  maxHeight: '100%',
+  alignItems: 'center',
+  justifyContent: 'center',
   },
   emptyCanvas: {
     backgroundColor: '#f8fafc',
@@ -369,10 +456,10 @@ const styles = StyleSheet.create({
   
   // Floating Action Buttons - Top
   topActionsContainer: {
-    position: 'absolute',
-    top: 60,
-    left: 20,
-    right: 20,
+  position: 'absolute',
+  top: 24,
+  left: 16,
+  right: 16,
     zIndex: 10,
     gap: 12,
   },
@@ -415,6 +502,26 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     fontSize: 14,
     fontWeight: '700',
+  },
+  // Zoom slider row
+  sliderRow: {
+    marginTop: 8,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sliderLabel: {
+    color: '#1f2937',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  zoomSlider: {
+    flex: 1,
+    height: 32,
   },
   
   // Size Control
@@ -475,9 +582,9 @@ const styles = StyleSheet.create({
   
   // Bottom Actions
   bottomActionsContainer: {
-    position: 'absolute',
-    bottom: 40,
-    right: 20,
+  position: 'absolute',
+  bottom: 24,
+  right: 16,
     flexDirection: 'row',
     gap: 12,
     zIndex: 10,

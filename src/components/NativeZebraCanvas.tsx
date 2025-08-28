@@ -68,6 +68,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   const lastEncodeTimeRef = useRef<number>(0);
   // Precomputed boundary mask (1 = boundary/outline, 0 = fillable)
   const boundaryMaskRef = useRef<Uint8Array | null>(null);
+  // Strong boundary mask (stricter, no dilation) to protect true dark lines in edge coat
+  const strongBoundaryMaskRef = useRef<Uint8Array | null>(null);
   // Keep a stable ref for onColoringComplete to avoid effect churn
   const onCompleteRef = useRef<NativeZebraCanvasProps['onColoringComplete']>(onColoringComplete);
   useEffect(() => {
@@ -248,8 +250,9 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       setBitmap(newBitmap);
       setOriginalTemplate(cloneBitmap(newBitmap)); // Store original template for eraser
       setCanvasSize({ width: finalWidth, height: finalHeight });
-  // Build a robust boundary mask from the loaded template
+  // Build robust masks from the loaded template
   boundaryMaskRef.current = computeBoundaryMask(newBitmap);
+  strongBoundaryMaskRef.current = computeStrongBoundaryMask(newBitmap);
       await updateDataUrl(newBitmap);
       
       // Save initial state to history
@@ -311,8 +314,9 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     setOriginalTemplate(cloneBitmap(fallbackBitmap)); // Store original template for eraser
     // Use provided dimensions for fullscreen mode
     setCanvasSize({ width: templateWidth, height: templateHeight });
-  // Build boundary mask for fallback as well
+  // Build boundary masks for fallback as well
   boundaryMaskRef.current = computeBoundaryMask(fallbackBitmap);
+  strongBoundaryMaskRef.current = computeStrongBoundaryMask(fallbackBitmap);
     await updateDataUrl(fallbackBitmap);
     
     // Save initial state to history
@@ -334,10 +338,14 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         let sx = Math.floor(touchX * scaleX);
         let sy = Math.floor(touchY * scaleY);
 
-        const mask = boundaryMaskRef.current;
-        if (!mask) {
+        // Ensure masks are available
+        if (!boundaryMaskRef.current) {
           console.warn('performFloodFill: missing boundary mask, building now.');
           boundaryMaskRef.current = computeBoundaryMask(bitmap);
+        }
+        if (!strongBoundaryMaskRef.current) {
+          console.warn('performFloodFill: missing strong boundary mask, building now.');
+          strongBoundaryMaskRef.current = computeStrongBoundaryMask(bitmap);
         }
 
         // If tapped on a boundary, nudge to nearest fillable pixel within small radius
@@ -398,8 +406,9 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         }
 
         // Local BFS flood fill that respects boundary mask and color tolerance
-        const q: Array<{ x: number; y: number }> = [{ x: sx, y: sy }];
-        const visited = new Uint8Array(bitmap.width * bitmap.height);
+  const q: Array<{ x: number; y: number }> = [{ x: sx, y: sy }];
+  const visited = new Uint8Array(bitmap.width * bitmap.height);
+  const filledMask = new Uint8Array(bitmap.width * bitmap.height);
         const withinTol = (x: number, y: number) => {
           const i = (y * bitmap.width + x) * 4;
           const r = newData[i];
@@ -433,6 +442,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
           newData[pi + 1] = fillG;
           newData[pi + 2] = fillB;
           newData[pi + 3] = fillA;
+          filledMask[mIndex] = 1;
           filled++;
 
           // 4-way neighbors
@@ -443,6 +453,34 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         }
 
         if (filled > 0) {
+          // Edge coat: paint a 1px halo around the filled region up to (but not onto) strong boundaries
+    const expanded = boundaryMaskRef.current!; // safe after ensuring above
+    const strong = strongBoundaryMaskRef.current!;
+          for (let y = 0; y < bitmap.height; y++) {
+            for (let x = 0; x < bitmap.width; x++) {
+              const idx1 = y * bitmap.width + x;
+              if (filledMask[idx1] !== 1) continue;
+              for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                  if (dx === 0 && dy === 0) continue;
+                  const nx = x + dx;
+                  const ny = y + dy;
+                  if (nx < 0 || ny < 0 || nx >= bitmap.width || ny >= bitmap.height) continue;
+                  const nIdx = ny * bitmap.width + nx;
+      // Protect true dark outlines, but allow coating the anti-aliased rim (expanded-only)
+      if (strong[nIdx] === 1) continue;
+      if (filledMask[nIdx] === 1) continue;
+                  // Paint neighbor
+                  const pi2 = nIdx * 4;
+                  newData[pi2] = fillR;
+                  newData[pi2 + 1] = fillG;
+                  newData[pi2 + 2] = fillB;
+                  newData[pi2 + 3] = fillA;
+                }
+              }
+            }
+          }
+
           const newBitmap: ColoringBitmap = {
             width: bitmap.width,
             height: bitmap.height,
@@ -666,6 +704,31 @@ function computeBoundaryMask(bmp: ColoringBitmap): Uint8Array {
   out = dilate(out);
   out = dilate(out);
   return out;
+}
+
+// Stronger boundary detector: no dilation and stricter darkness thresholds.
+// Use this to prevent the edge coat from painting onto true outline pixels.
+function computeStrongBoundaryMask(bmp: ColoringBitmap): Uint8Array {
+  const { width, height, data } = bmp;
+  const mask = new Uint8Array(width * height);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
+      const luma = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+      const minRGB = Math.min(r, g, b);
+      // Stricter: darker and more opaque
+      const isDarkLine = (a >= 200) && (minRGB <= 60 || luma <= 100);
+      if (isDarkLine) {
+        mask[y * width + x] = 1;
+      }
+    }
+  }
+  return mask;
 }
 
 const styles = StyleSheet.create({

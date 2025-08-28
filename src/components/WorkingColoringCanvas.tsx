@@ -22,6 +22,8 @@ interface WorkingColoringCanvasProps {
   brushSize?: number;
   templateUri?: string;
   onColoringChange?: (imageData: string) => void;
+  width?: number;
+  height?: number;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -35,6 +37,8 @@ export const WorkingColoringCanvas = React.forwardRef<any, WorkingColoringCanvas
       brushSize = 8,
       templateUri,
       onColoringChange,
+  width,
+  height,
     },
     ref
   ) => {
@@ -50,7 +54,7 @@ export const WorkingColoringCanvas = React.forwardRef<any, WorkingColoringCanvas
     // Initialize canvas
     useEffect(() => {
       initializeCanvas();
-    }, [templateUri]);
+    }, [templateUri, width, height]);
 
     const snapshot = () => {
       if (!canvasRef.current) return;
@@ -96,15 +100,17 @@ export const WorkingColoringCanvas = React.forwardRef<any, WorkingColoringCanvas
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // Set canvas size
-      canvas.width = CANVAS_SIZE;
-      canvas.height = CANVAS_SIZE;
+      // Set canvas size (use provided dimensions when available)
+      const targetW = Math.floor(width ?? CANVAS_SIZE);
+      const targetH = Math.floor(height ?? CANVAS_SIZE);
+      canvas.width = targetW;
+      canvas.height = targetH;
 
       // Clear with white background
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      if (templateUri) {
+  if (templateUri) {
         // Load template image
         const img = new Image();
         img.crossOrigin = 'anonymous';
