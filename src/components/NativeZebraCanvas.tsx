@@ -29,6 +29,8 @@ interface NativeZebraCanvasProps {
   width?: number;
   height?: number;
   onColoringComplete?: (imageData: string) => void;
+  // When false, disable all drawing interactions (used for Move mode)
+  interactionEnabled?: boolean;
 }
 
 interface ColoringBitmap {
@@ -48,6 +50,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   width = DEFAULT_CANVAS_SIZE,
   height = DEFAULT_CANVAS_SIZE,
   onColoringComplete,
+  interactionEnabled = true,
 }, ref) => {
   const [bitmap, setBitmap] = useState<ColoringBitmap | null>(null);
   const [originalTemplate, setOriginalTemplate] = useState<ColoringBitmap | null>(null);
@@ -62,6 +65,11 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   const lastEncodeTimeRef = useRef<number>(0);
   // Precomputed boundary mask (1 = boundary/outline, 0 = fillable)
   const boundaryMaskRef = useRef<Uint8Array | null>(null);
+  // Keep a stable ref for onColoringComplete to avoid effect churn
+  const onCompleteRef = useRef<NativeZebraCanvasProps['onColoringComplete']>(onColoringComplete);
+  useEffect(() => {
+    onCompleteRef.current = onColoringComplete;
+  }, [onColoringComplete]);
 
   const cloneBitmap = useCallback((bmp: ColoringBitmap): ColoringBitmap => {
     return {
@@ -109,14 +117,14 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       const uri = `data:image/png;base64,${base64Png}`;
       setDataUrl(uri);
 
-      if (onColoringComplete) onColoringComplete(uri);
+  if (onCompleteRef.current) onCompleteRef.current(uri);
     } catch (error) {
       console.error('Failed to update data URL:', error);
       // Fallback: simple 1x1 white PNG
       const transparentPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
       setDataUrl(`data:image/png;base64,${transparentPng}`);
     }
-  }, [onColoringComplete]);
+  }, []);
 
   // Expose undo/redo/clear methods via ref
   useImperativeHandle(ref, () => ({
@@ -516,15 +524,22 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       };
 
       setBitmap(newBitmap);
-  // Defer PNG encode to stroke end; keep bitmap in memory to avoid flashing
+      // Light live update while drawing: throttle PNG encodes to avoid flicker
+      const now = Date.now();
+      if (now - lastEncodeTimeRef.current > 120) {
+        lastEncodeTimeRef.current = now;
+        // Fire and forget; errors are caught inside updateDataUrl
+        updateDataUrl(newBitmap);
+      }
+  // Keep final high-quality encode to stroke end
     } catch (error) {
       console.error('❌ Error during brush stroke:', error);
     }
   }, [bitmap, originalTemplate, isInitialized, canvasSize, selectedColor, selectedTool, brushWidth, hexToRgba, updateDataUrl]);
 
   const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => isInitialized,
-    onMoveShouldSetPanResponder: () => isInitialized && (selectedTool === 'brush' || selectedTool === 'eraser'),
+    onStartShouldSetPanResponder: () => isInitialized && interactionEnabled,
+    onMoveShouldSetPanResponder: () => isInitialized && interactionEnabled && (selectedTool === 'brush' || selectedTool === 'eraser'),
 
     onPanResponderGrant: (evt) => {
       const { locationX, locationY } = evt.nativeEvent;
@@ -570,10 +585,11 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     };
     
     initializeCanvas();
-  }, [templateUri, loadTemplate, createFallbackTemplate]);
+  // Reinitialize only when templateUri changes
+  }, [templateUri]);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} pointerEvents={interactionEnabled ? 'auto' : 'none'}>
       <View
         style={[styles.canvasContainer, { width: canvasSize.width, height: canvasSize.height }]}
         {...panResponder.panHandlers}

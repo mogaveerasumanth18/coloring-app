@@ -50,7 +50,7 @@ export default function IntegratedColoringBookApp({
   const insets = useSafeAreaInsets();
   const [selectedColor, setSelectedColor] = useState('#FF6B6B');
   const [selectedTool, setSelectedTool] = useState<
-    'brush' | 'bucket' | 'eraser'
+    'brush' | 'bucket' | 'eraser' | 'move'
   >('bucket');
   const [brushSize, setBrushSize] = useState(8);
   const [currentTemplate, setCurrentTemplate] = useState<any>(null);
@@ -72,6 +72,8 @@ export default function IntegratedColoringBookApp({
   const translationY = useSharedValue(0);
   const originX = useSharedValue(0);
   const originY = useSharedValue(0);
+  const canvasW = useSharedValue(screenWidth - 32);
+  const canvasH = useSharedValue((screenWidth - 32) * 0.8);
   const mobileSvgTemplate = `\
 <svg width="300" height="240" viewBox="0 0 300 240" xmlns="http://www.w3.org/2000/svg">\
   <path d="M150,40 L170,100 L230,100 L185,135 L200,195 L150,165 L100,195 L115,135 L70,100 L130,100 Z" fill="none" stroke="#333" stroke-width="2"/>\
@@ -134,20 +136,26 @@ export default function IntegratedColoringBookApp({
       context.startY = translationY.value;
     },
     onActive: (event: any, context: any) => {
-      // Only allow panning when zoomed in
-      if (scale.value > 1) {
+      // Only allow panning when zoomed in or in explicit move mode
+      const allow = scale.value > 1 || selectedTool === 'move';
+      if (allow) {
         translationX.value = context.startX + event.translationX;
         translationY.value = context.startY + event.translationY;
       }
     },
     onEnd: () => {
-      // Add boundaries to prevent panning too far
-      const maxTranslation = ((scale.value - 1) * screenWidth) / 2;
+      // Add boundaries to prevent panning too far. Constrain to container size.
+      const scaledW = canvasW.value * scale.value;
+      const scaledH = canvasH.value * scale.value;
+      const containerW = canvasW.value;
+      const containerH = canvasH.value;
+      const maxX = Math.max(0, (scaledW - containerW) / 2);
+      const maxY = Math.max(0, (scaledH - containerH) / 2);
       translationX.value = withSpring(
-        Math.max(-maxTranslation, Math.min(maxTranslation, translationX.value))
+        Math.max(-maxX, Math.min(maxX, translationX.value))
       );
       translationY.value = withSpring(
-        Math.max(-maxTranslation, Math.min(maxTranslation, translationY.value))
+        Math.max(-maxY, Math.min(maxY, translationY.value))
       );
     },
   });
@@ -314,7 +322,7 @@ export default function IntegratedColoringBookApp({
       <View style={styles.canvasArea}>
   {/* Removed status label per UX request */}
 
-        {/* Zoom controls - moved above canvas as a horizontal bar */}
+  {/* Zoom controls - moved above canvas as a horizontal bar */}
         <View style={styles.topZoomBar}>
           <TouchableOpacity style={styles.topZoomBtn} onPress={handleZoomOut}>
             <Feather name="minus" size={18} color="#1F2937" />
@@ -337,7 +345,7 @@ export default function IntegratedColoringBookApp({
                     <WorkingColoringCanvas
                       ref={bitmapCanvasRef}
                       selectedColor={selectedColor}
-                      selectedTool={selectedTool}
+                      selectedTool={selectedTool === 'move' ? 'brush' : selectedTool}
                       brushSize={brushSize}
                       templateUri={currentTemplate.bitmapUri}
                     />
@@ -348,17 +356,19 @@ export default function IntegratedColoringBookApp({
           ) : (
             // On native, pan with two fingers to avoid conflicts with drawing; zoom via top bar
             <View ref={captureViewRef as any} style={styles.modernCanvasContainer}>
-              <PanGestureHandler onGestureEvent={panHandler} minPointers={2}>
+              {/* One-finger pan when in Move mode; otherwise require two fingers so drawing remains single-finger */}
+              <PanGestureHandler onGestureEvent={panHandler} minPointers={selectedTool === 'move' ? 1 : 2}>
                 <Animated.View style={[animatedStyle, { flex: 1 }]}>
                   <NativeZebraCanvas
                     ref={bitmapCanvasRef}
                     templateUri={currentTemplate.bitmapUri}
                     selectedColor={selectedColor}
-                    selectedTool={selectedTool}
+                    selectedTool={selectedTool === 'move' ? 'brush' : selectedTool}
                     brushWidth={brushSize}
                     onColoringComplete={() => {}}
                     width={screenWidth - 32}
                     height={(screenWidth - 32) * 0.8}
+                    interactionEnabled={selectedTool !== 'move'}
                   />
                 </Animated.View>
               </PanGestureHandler>
@@ -400,23 +410,37 @@ export default function IntegratedColoringBookApp({
             <MaterialIcons name="format-color-fill" size={24} color={selectedTool === 'bucket' ? '#FFFFFF' : '#64748B'} />
             <Text style={[styles.toolLabel, selectedTool === 'bucket' && styles.activeToolLabel]}>Bucket</Text>
           </TouchableOpacity>
+
+          {/* Move tool button to enable one-finger panning of zoomed canvas */}
+          <TouchableOpacity
+            style={[styles.toolButton, selectedTool === 'move' && styles.activeToolButton]}
+            onPress={() => setSelectedTool('move')}
+          >
+            <Feather name="move" size={24} color={selectedTool === 'move' ? '#FFFFFF' : '#64748B'} />
+            <Text style={[styles.toolLabel, selectedTool === 'move' && styles.activeToolLabel]}>Move</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Size Slider - Only show for pen/brush tools */}
         {(selectedTool === 'brush' || selectedTool === 'eraser') && (
           <View style={styles.sizeSliderRow}>
             <Text style={styles.sizeLabel}>Size: {brushSize}px</Text>
-            <Slider
-              style={styles.sizeSlider}
-              minimumValue={2}
-              maximumValue={20}
-              value={brushSize}
-              step={1}
-              onSlidingComplete={(v: number) => setBrushSize(v)}
-              minimumTrackTintColor="#6366f1"
-              maximumTrackTintColor="#E2E8F0"
-              thumbTintColor="#6366f1"
-            />
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+              <Slider
+                style={styles.sizeSlider}
+                minimumValue={2}
+                maximumValue={40}
+                value={brushSize}
+                step={1}
+                onValueChange={(v: number) => setBrushSize(Math.round(v))}
+                minimumTrackTintColor="#6366f1"
+                maximumTrackTintColor="#E2E8F0"
+                thumbTintColor="#6366f1"
+              />
+              <View style={{ width: 32, alignItems: 'center' }}>
+                <View style={{ width: Math.min(brushSize, 28), height: Math.min(brushSize, 28), borderRadius: 999, backgroundColor: selectedColor, borderWidth: 1, borderColor: '#CBD5E1' }} />
+              </View>
+            </View>
           </View>
         )}
 
@@ -427,6 +451,14 @@ export default function IntegratedColoringBookApp({
           </TouchableOpacity>
           <TouchableOpacity style={styles.modernActionButton} onPress={() => bitmapCanvasRef.current?.redo?.()}>
             <Ionicons name="arrow-redo" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+          {/* Move toggle button */}
+          <TouchableOpacity
+            style={[styles.modernActionButton, selectedTool === 'move' && { backgroundColor: '#10b981' }]}
+            onPress={() => setSelectedTool(selectedTool === 'move' ? 'brush' : 'move')}
+            accessibilityLabel="Move"
+          >
+            <Feather name="move" size={20} color="#FFFFFF" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.modernActionButton} onPress={handleExpandFullscreen}>
             <Feather name={isFullscreen ? "minimize-2" : "maximize-2"} size={20} color="#FFFFFF" />
@@ -515,7 +547,7 @@ export default function IntegratedColoringBookApp({
         onClose={() => setIsFullscreen(false)}
         templateUri={currentTemplate?.bitmapUri}
         selectedColor={selectedColor}
-        selectedTool={selectedTool}
+  selectedTool={selectedTool === 'move' ? 'brush' : selectedTool}
         brushSize={brushSize}
         onColoringChange={() => {}}
         onColoringComplete={() => {}}
@@ -527,23 +559,16 @@ export default function IntegratedColoringBookApp({
           <TouchableOpacity style={styles.colorTrayBackdrop} activeOpacity={1} onPress={() => setShowColorTray(false)} />
           <View style={styles.centerModal}>
             <Text style={styles.colorTrayTitle}>Pick a color</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.centerModalRow}
-            >
+            <View style={styles.gridPalette}>
               {colors.map((c) => (
-                <TouchableOpacity
-                  key={c}
-                  onPress={() => {
-                    setSelectedColor(c);
-                    setShowColorTray(false);
-                  }}
-                  style={[styles.centerModalSwatch, { backgroundColor: c }, selectedColor === c && styles.centerModalSwatchActive]}
-                />
+                <TouchableOpacity key={c} onPress={() => { setSelectedColor(c); setShowColorTray(false); }}
+                  style={[styles.gridSwatch, { backgroundColor: c }, selectedColor === c && styles.centerModalSwatchActive]} />
               ))}
-            </ScrollView>
-            <View style={{ height: 8 }} />
+            </View>
+            <TouchableOpacity style={styles.colorWheelBtn} onPress={() => Alert.alert('Color wheel', 'Coming soon!')}>
+              <Feather name="aperture" size={16} color="#fff" />
+              <Text style={styles.colorWheelText}>Open color wheel</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.centerModalClose} onPress={() => setShowColorTray(false)}>
               <Text style={styles.centerModalCloseText}>Close</Text>
             </TouchableOpacity>
@@ -650,6 +675,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 4,
+  overflow: 'hidden',
   },
   modernEmptyCanvas: {
     flex: 1,
@@ -1415,6 +1441,36 @@ const styles = StyleSheet.create({
   },
   centerModalCloseText: {
     color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  gridPalette: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 8,
+  },
+  gridSwatch: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  colorWheelBtn: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#10b981',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  colorWheelText: {
+    color: '#fff',
     fontWeight: '700',
   },
   colorTrayTitle: {
