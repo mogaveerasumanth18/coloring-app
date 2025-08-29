@@ -78,8 +78,9 @@ export const OpenCVProcessor = forwardRef<OpenCVProcessorHandle, { style?: any }
   useOnce(() => {
     (async () => {
       try {
-        // Important: ensure you have placed a real opencv.js at src/assets/opencv.js
-        const asset = Asset.fromModule(require('../assets/opencv.js'));
+        // Important: ensure you have placed a real OpenCV build at src/assets/opencv.txt (NOT .js)
+        // Using .txt avoids Metro trying to parse a huge JS file, preventing OOM during bundling.
+        const asset = Asset.fromModule(require('../assets/opencv.txt'));
         await asset.downloadAsync();
         const uri = asset.localUri || asset.uri;
         const text = await FileSystem.readAsStringAsync(uri!, { encoding: FileSystem.EncodingType.UTF8 });
@@ -88,8 +89,8 @@ export const OpenCVProcessor = forwardRef<OpenCVProcessorHandle, { style?: any }
           webRef.current?.postMessage(JSON.stringify({ type: 'load-opencv', opencvSrc: text }));
         }, 200);
       } catch (e: any) {
-        console.warn('OpenCV asset load failed. Place src/assets/opencv.js. Error:', e?.message);
-        Alert.alert('OpenCV missing', 'Place a built opencv.js at src/assets/opencv.js to enable offline conversion.');
+        console.warn('OpenCV asset load failed. Place src/assets/opencv.txt (contents of opencv.js). Error:', e?.message);
+        Alert.alert('OpenCV missing', 'Place a built OpenCV file at src/assets/opencv.txt to enable offline conversion.');
       }
     })();
   });

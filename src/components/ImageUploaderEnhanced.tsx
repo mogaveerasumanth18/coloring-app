@@ -14,6 +14,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { OpenCVProcessor, type OpenCVProcessorHandle } from './OpenCVProcessor';
+import { JSLineArtProcessor, type JSLineArtProcessorHandle } from './JSLineArtProcessor';
 
 import {
   type PngTemplate,
@@ -37,6 +38,7 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const cvRef = useRef<OpenCVProcessorHandle>(null);
+  const jsRef = useRef<JSLineArtProcessorHandle>(null);
   const [busy, setBusy] = useState(false);
 
   const categories = [
@@ -133,15 +135,26 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
     try {
       // wait for OpenCV ready (simple poll)
       let tries = 0;
-      while (!(cvRef.current?.isReady?.()) && tries < 25) {
+      while (!(cvRef.current?.isReady?.()) && tries < 15) {
         await new Promise(r => setTimeout(r, 120));
         tries++;
       }
-      if (!cvRef.current?.isReady?.()) {
-        Alert.alert('Converter not ready', 'OpenCV failed to initialize. Ensure opencv.js exists.');
-        return;
+      let resultB64: string | null = null;
+      if (cvRef.current?.isReady?.()) {
+        resultB64 = await cvRef.current.process(dataUrl, { method: 'canny', threshold1: 50, threshold2: 150, blur: 5, invert: true, maxSize: 1400 });
+      } else {
+        // Fallback to pure-JS Sobel pipeline (no OpenCV required)
+        let tries2 = 0;
+        while (!(jsRef.current?.isReady?.()) && tries2 < 10) {
+          await new Promise(r => setTimeout(r, 120));
+          tries2++;
+        }
+        if (!jsRef.current?.isReady?.()) {
+          Alert.alert('Converter not ready', 'Image converter failed to initialize.');
+          return;
+        }
+        resultB64 = await jsRef.current.process(dataUrl, { method: 'sobel', blur: 5, threshold: 80, invert: true, maxSize: 1400, dilate: 1 });
       }
-      const resultB64 = await cvRef.current.process(dataUrl, { method: 'canny', threshold1: 50, threshold2: 150, blur: 5, invert: true, maxSize: 1400 });
       // persist result to a file, return file:// URI for stability
       const filename = `colored_template_${Date.now()}.png`;
       const path = FileSystem.cacheDirectory! + filename;
@@ -188,8 +201,9 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
 
   return (
     <View style={styles.container}>
-  {/* Hidden OpenCV WebView processor (offline, native only) */}
+  {/* Hidden processors (native only). Will try OpenCV first, then fall back to pure-JS pipeline. */}
   {Platform.OS !== 'web' ? <OpenCVProcessor ref={cvRef} /> : null}
+  {Platform.OS !== 'web' ? <JSLineArtProcessor ref={jsRef} /> : null}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>🎨 Choose Your PNG Template!</Text>
         <Text style={styles.headerSubtitle}>

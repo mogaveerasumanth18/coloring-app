@@ -18,7 +18,9 @@
       "env": {
         "EXPO_NO_DOTENV": "1",
         "APP_ENV": "production",
-        "FLIPPER_DISABLE": "1"
+        "FLIPPER_DISABLE": "1",
+        "EXPO_USE_METRO_WORKER_MINIFIER": "1",
+        "NODE_OPTIONS": "--max_old_space_size=4096"
       }
     },
     "simple": {
@@ -26,6 +28,10 @@
       "pnpm": "9.12.3",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_USE_METRO_WORKER_MINIFIER": "1",
+        "NODE_OPTIONS": "--max_old_space_size=4096"
       }
     },
     "local": {
@@ -36,7 +42,9 @@
         "credentialsSource": "local"
       },
       "env": {
-        "APP_ENV": "development"
+        "APP_ENV": "development",
+        "EXPO_USE_METRO_WORKER_MINIFIER": "1",
+        "NODE_OPTIONS": "--max_old_space_size=4096"
       }
     },
     "staging": {
@@ -53,7 +61,9 @@
       "env": {
         "APP_ENV": "staging",
         "EXPO_NO_DOTENV": "1",
-        "FLIPPER_DISABLE": "1"
+        "FLIPPER_DISABLE": "1",
+        "EXPO_USE_METRO_WORKER_MINIFIER": "1",
+        "NODE_OPTIONS": "--max_old_space_size=4096"
       }
     },
     "development": {
@@ -68,7 +78,9 @@
       },
       "env": {
         "APP_ENV": "development",
-        "EXPO_NO_DOTENV": "1"
+        "EXPO_NO_DOTENV": "1",
+        "EXPO_USE_METRO_WORKER_MINIFIER": "1",
+        "NODE_OPTIONS": "--max_old_space_size=4096"
       }
     }
   },
