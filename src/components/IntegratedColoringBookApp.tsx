@@ -43,6 +43,10 @@ import { NativeZebraCanvas } from './NativeZebraCanvas';
 import FullscreenCanvas from './FullscreenCanvas';
 
 const { width: screenWidth } = Dimensions.get('window');
+// UI sizing constants for responsive palette/slider
+const MODAL_SIDE_PADDING = 16;
+const SWATCH_GAP = 12;
+const DEFAULT_SWATCH_SIZE = 44; // will shrink/grow based on width
 
 export default function IntegratedColoringBookApp({
   compact = false,
@@ -395,7 +399,7 @@ export default function IntegratedColoringBookApp({
       {/* Bottom Toolbar - Fixed at bottom (20% of screen) */}
       <View style={[styles.bottomToolbar, { paddingBottom: insets.bottom + 16 }]}>
         {/* Tools Section - Top row */}
-        <View style={styles.toolsRow}>
+    <View style={styles.toolsRow}>
           {/* Eraser replaces Pen */}
           <TouchableOpacity
             style={[styles.toolButton, selectedTool === 'eraser' && styles.activeToolButton]}
@@ -418,7 +422,7 @@ export default function IntegratedColoringBookApp({
             onPress={() => setSelectedTool('bucket')}
           >
             <MaterialIcons name="format-color-fill" size={24} color={selectedTool === 'bucket' ? '#FFFFFF' : '#64748B'} />
-            <Text style={[styles.toolLabel, selectedTool === 'bucket' && styles.activeToolLabel]}>Bucket</Text>
+      <Text style={[styles.toolLabel, selectedTool === 'bucket' && styles.activeToolLabel]}>Fill</Text>
           </TouchableOpacity>
 
           {/* Move tool button to enable one-finger panning of zoomed canvas */}
@@ -429,39 +433,61 @@ export default function IntegratedColoringBookApp({
             <Feather name="move" size={24} color={selectedTool === 'move' ? '#FFFFFF' : '#64748B'} />
             <Text style={[styles.toolLabel, selectedTool === 'move' && styles.activeToolLabel]}>Move</Text>
           </TouchableOpacity>
-
-          {/* Color picker button available for any tool */}
-          <TouchableOpacity
-            style={[styles.toolButton, showColorTray && styles.activeToolButton]}
-            onPress={() => setShowColorTray(true)}
-          >
-            <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: selectedColor, borderWidth: 2, borderColor: '#e2e8f0' }} />
-            <Text style={[styles.toolLabel, showColorTray && styles.activeToolLabel]}>Color</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Size Slider - Only show for pen/brush tools */}
         {(selectedTool === 'brush' || selectedTool === 'eraser') && (
           <View style={styles.sizeSliderRow}>
             <Text style={styles.sizeLabel}>Size: {brushSize}px</Text>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {/* Decrease size button */}
+              <TouchableOpacity
+                accessibilityLabel="Decrease size"
+                onPress={() => setBrushSize((s) => Math.max(5, s - 1))}
+                style={styles.modernSizeBtn}
+              >
+                <Feather name="minus" size={16} color="#4F46E5" />
+              </TouchableOpacity>
+
+              {/* Draggable slider */}
               <NativeViewGestureHandler ref={sliderGestureRef}>
                 <View style={{ flex: 1 }}>
                   <Slider
                     style={styles.sizeSlider}
-                    minimumValue={2}
-                    maximumValue={40}
+                    minimumValue={5}
+                    maximumValue={100}
                     value={brushSize}
                     step={1}
                     onValueChange={(v: number) => setBrushSize(Math.round(v))}
+                    onSlidingComplete={(v: number) => setBrushSize(Math.round(v))}
                     minimumTrackTintColor="#6366f1"
                     maximumTrackTintColor="#E2E8F0"
                     thumbTintColor="#6366f1"
                   />
                 </View>
               </NativeViewGestureHandler>
-              <View style={{ width: 32, alignItems: 'center' }}>
-                <View style={{ width: Math.min(brushSize, 28), height: Math.min(brushSize, 28), borderRadius: 999, backgroundColor: selectedColor, borderWidth: 1, borderColor: '#CBD5E1' }} />
+
+              {/* Increase size button */}
+              <TouchableOpacity
+                accessibilityLabel="Increase size"
+                onPress={() => setBrushSize((s) => Math.min(100, s + 1))}
+                style={styles.modernSizeBtn}
+              >
+                <Feather name="plus" size={16} color="#4F46E5" />
+              </TouchableOpacity>
+
+              {/* Live preview dot */}
+              <View style={{ width: 36, alignItems: 'center' }}>
+                <View
+                  style={{
+                    width: Math.min(brushSize, 28),
+                    height: Math.min(brushSize, 28),
+                    borderRadius: 999,
+                    backgroundColor: selectedTool === 'eraser' ? '#FFFFFF' : selectedColor,
+                    borderWidth: 1,
+                    borderColor: '#CBD5E1',
+                  }}
+                />
               </View>
             </View>
           </View>
@@ -586,22 +612,44 @@ export default function IntegratedColoringBookApp({
               contentContainerStyle={{ paddingBottom: 8 }}
             >
               <Text style={styles.colorTrayTitle}>Pick a color</Text>
-              {/* Three neat rows of swatches with larger touch targets */}
-              {[0,1,2].map((rowIdx) => {
-                const perRow = Math.ceil(colors.length / 3);
-                const row = colors.slice(rowIdx * perRow, (rowIdx + 1) * perRow);
-                return (
-                  <View key={rowIdx} style={styles.rowPalette}>
-                    {row.map((c) => (
-                      <TouchableOpacity
-                        key={`${rowIdx}-${c}`}
-                        onPress={() => { setSelectedColor(c); setShowColorTray(false); }}
-                        style={[styles.rowSwatch, { backgroundColor: c }, selectedColor === c && styles.centerModalSwatchActive]}
-                      />
-                    ))}
-                  </View>
+              {/* Responsive palette grid: compute columns/swatches to fit modal width */}
+              {(() => {
+                const modalWidth = Math.min(screenWidth - 40, 360);
+                const usable = modalWidth - MODAL_SIDE_PADDING * 2; // match centerModal padding
+                const columns = Math.max(3, Math.floor((usable + SWATCH_GAP) / (DEFAULT_SWATCH_SIZE + SWATCH_GAP)));
+                const swatchSize = Math.max(
+                  36,
+                  Math.min(52, Math.floor((usable - SWATCH_GAP * (columns - 1)) / columns))
                 );
-              })}
+                const rows: React.ReactNode[] = [];
+                for (let i = 0; i < colors.length; i += columns) {
+                  const row = colors.slice(i, i + columns);
+                  rows.push(
+                    <View key={`row-${i}`} style={[styles.rowPalette, { gap: SWATCH_GAP }]}>
+                      {row.map((c) => (
+                        <TouchableOpacity
+                          key={`${i}-${c}`}
+                          onPress={() => {
+                            setSelectedColor(c);
+                            setShowColorTray(false);
+                          }}
+                          style={[
+                            styles.rowSwatch,
+                            {
+                              width: swatchSize,
+                              height: swatchSize,
+                              borderRadius: swatchSize / 2,
+                              backgroundColor: c,
+                            },
+                            selectedColor === c && styles.centerModalSwatchActive,
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  );
+                }
+                return rows;
+              })()}
               {/* Compact color wheel section */}
               <View style={styles.wheelContainer}>
                 <ColorPicker
@@ -610,9 +658,9 @@ export default function IntegratedColoringBookApp({
                   style={{ width: '100%' }}
                 >
                   <Preview hideInitialColor hideText style={{ marginBottom: 10 }} />
-                  <Panel3 style={{ height: screenWidth < 380 ? 150 : 180, borderRadius: 12 }} />
-                  <HueSlider style={{ marginTop: 12 }} />
-                  <BrightnessSlider style={{ marginTop: 12, marginBottom: 4 }} />
+                  <Panel3 style={{ height: screenWidth < 380 ? 150 : 180, borderRadius: 12, width: '100%' }} />
+                  <HueSlider style={{ marginTop: 12, width: '100%' }} />
+                  <BrightnessSlider style={{ marginTop: 12, marginBottom: 4, width: '100%' }} />
                 </ColorPicker>
               </View>
               <TouchableOpacity style={styles.centerModalClose} onPress={() => setShowColorTray(false)}>
@@ -771,7 +819,7 @@ const styles = StyleSheet.create({
   bottomToolbar: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
-    paddingTop: 16,
+  paddingTop: 16,
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
     shadowColor: '#000',
@@ -779,11 +827,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
-    maxHeight: '35%',
+  // Extra bottom space to avoid Android system bars overlap
+  paddingBottom: 20,
+  maxHeight: '38%',
   },
   toolsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+  justifyContent: 'space-between',
+  gap: 10,
     marginBottom: 16,
   },
   toolButton: {
@@ -793,6 +844,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: '#F1F5F9',
     minWidth: 80,
+  marginHorizontal: 4,
     shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,

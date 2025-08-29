@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Platform,
   Image,
   ScrollView,
   StyleSheet,
@@ -102,10 +103,14 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
       ? templates
       : templates.filter((template) => template.category === selectedCategory);
 
-  // Responsive card width (2 cols by default, 3 on wide screens)
-  const columns = screenWidth >= 1200 ? 4 : screenWidth >= 900 ? 3 : 2;
-  const horizontalPadding = 20; // templatesGrid paddingHorizontal
-  const cardMargin = 10; // templateCard marginHorizontal
+  // Responsive card width
+  // Web keeps wider grids; Native prioritizes larger cards (1–2 columns on phones)
+  const columns = Platform.OS === 'web'
+    ? (screenWidth >= 1200 ? 4 : screenWidth >= 900 ? 3 : 2)
+    : (screenWidth >= 600 ? 3 : screenWidth >= 440 ? 2 : 1);
+  // Reduce horizontal padding and margins so cards get more width
+  const horizontalPadding = 8; // keep in sync with styles.templatesGrid paddingHorizontal
+  const cardMargin = 8; // templateCard marginHorizontal
   const available = screenWidth - horizontalPadding * 2;
   const cardWidth = Math.floor((available - cardMargin * 2 * columns) / columns);
 
@@ -165,14 +170,14 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
         style={styles.templatesScroll}
         showsVerticalScrollIndicator={false}
       >
-    <View style={styles.templatesGrid}>
+        <View style={styles.templatesGrid}>
           {filteredTemplates.map((template) => (
             <TouchableOpacity
               key={template.id}
-      style={[styles.templateCard, { width: cardWidth, marginHorizontal: cardMargin }]}
+              style={[styles.templateCard, { width: cardWidth, marginHorizontal: cardMargin }]}
               onPress={() => handleTemplateSelect(template)}
             >
-      <View style={[styles.templateImageContainer, { height: Math.round(cardWidth * 0.66) }]}>
+              <View style={[styles.templateImageContainer, { height: Math.round(cardWidth * 0.66) }]}>
                 <Image
                   source={{ uri: template.thumbnailUri }}
                   style={styles.templateImage}
@@ -333,16 +338,16 @@ const styles = StyleSheet.create({
   templatesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 10,
+  paddingHorizontal: 8,
     paddingVertical: 16,
     justifyContent: 'center',
   },
   templateCard: {
-    width: (screenWidth - 60) / 2,
+  width: (screenWidth - 60) / 2,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     marginBottom: 20,
-    marginHorizontal: 10,
+  marginHorizontal: 8,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: {
