@@ -48,6 +48,60 @@ const MODAL_SIDE_PADDING = 16;
 const SWATCH_GAP = 12;
 const DEFAULT_SWATCH_SIZE = 44; // will shrink/grow based on width
 
+// Small custom slider for Android to avoid gesture conflicts with the native Slider
+function SizeSliderNative({
+  value,
+  onChange,
+  min = 5,
+  max = 100,
+  simultaneousHandlers,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  simultaneousHandlers?: any;
+}) {
+  const [trackW, setTrackW] = React.useState(0);
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+  const valToX = (v: number) => {
+    if (trackW <= 0) return 0;
+    const p = (v - min) / (max - min);
+    return clamp(p, 0, 1) * trackW;
+  };
+  const xToVal = (x: number) => {
+    if (trackW <= 0) return min;
+    const p = clamp(x / trackW, 0, 1);
+    return Math.round(min + p * (max - min));
+  };
+
+  const onPanEvent = React.useCallback((evt: any) => {
+    const x = evt.nativeEvent.x ?? 0; // absolute inside the track
+    onChange(xToVal(x));
+  }, [trackW, onChange]);
+
+  const onPanStateChange = React.useCallback((evt: any) => {
+    if (evt.nativeEvent?.x != null) {
+      onChange(xToVal(evt.nativeEvent.x));
+    }
+  }, [trackW, onChange]);
+
+  const thumbX = valToX(value);
+  const THUMB = 28;
+
+  return (
+    <PanGestureHandler onGestureEvent={onPanEvent} onHandlerStateChange={onPanStateChange} simultaneousHandlers={simultaneousHandlers}>
+      <View style={styles.customSliderWrap}>
+        <View style={styles.customSliderTrack} onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}>
+          <View style={[styles.customSliderFill, { width: thumbX }]} />
+          <View style={[styles.customSliderThumb, { left: Math.max(0, thumbX - THUMB / 2), width: THUMB, height: THUMB }]} />
+        </View>
+      </View>
+    </PanGestureHandler>
+  );
+}
+
 export default function IntegratedColoringBookApp({
   compact = false,
 }: {
@@ -450,22 +504,32 @@ export default function IntegratedColoringBookApp({
               </TouchableOpacity>
 
               {/* Draggable slider */}
-              <NativeViewGestureHandler ref={sliderGestureRef}>
-                <View style={{ flex: 1 }}>
-                  <Slider
-                    style={styles.sizeSlider}
-                    minimumValue={5}
-                    maximumValue={100}
-                    value={brushSize}
-                    step={1}
-                    onValueChange={(v: number) => setBrushSize(Math.round(v))}
-                    onSlidingComplete={(v: number) => setBrushSize(Math.round(v))}
-                    minimumTrackTintColor="#6366f1"
-                    maximumTrackTintColor="#E2E8F0"
-                    thumbTintColor="#6366f1"
-                  />
-                </View>
-              </NativeViewGestureHandler>
+              {Platform.OS === 'android' ? (
+                <SizeSliderNative
+                  value={brushSize}
+                  onChange={(v) => setBrushSize(v)}
+                  min={5}
+                  max={100}
+                  simultaneousHandlers={sliderGestureRef}
+                />
+              ) : (
+                <NativeViewGestureHandler ref={sliderGestureRef}>
+                  <View style={{ flex: 1 }}>
+                    <Slider
+                      style={styles.sizeSlider}
+                      minimumValue={5}
+                      maximumValue={100}
+                      value={brushSize}
+                      step={1}
+                      onValueChange={(v: number) => setBrushSize(Math.round(v))}
+                      onSlidingComplete={(v: number) => setBrushSize(Math.round(v))}
+                      minimumTrackTintColor="#6366f1"
+                      maximumTrackTintColor="#E2E8F0"
+                      thumbTintColor="#6366f1"
+                    />
+                  </View>
+                </NativeViewGestureHandler>
+              )}
 
               {/* Increase size button */}
               <TouchableOpacity
@@ -494,7 +558,7 @@ export default function IntegratedColoringBookApp({
         )}
 
         {/* Actions Section - Middle row */}
-        <View style={styles.actionsRow}>
+    <View style={styles.actionsRow}>
           <TouchableOpacity style={styles.modernActionButton} onPress={() => bitmapCanvasRef.current?.undo?.()}>
             <Ionicons name="arrow-undo" size={20} color="#FFFFFF" />
           </TouchableOpacity>
@@ -503,7 +567,7 @@ export default function IntegratedColoringBookApp({
           </TouchableOpacity>
           {/* Move toggle button */}
           <TouchableOpacity
-            style={[styles.modernActionButton, selectedTool === 'move' && { backgroundColor: '#10b981' }]}
+      style={[styles.modernActionButton, selectedTool === 'move' && { backgroundColor: '#10b981' }]}
             onPress={() => setSelectedTool(selectedTool === 'move' ? 'brush' : 'move')}
             accessibilityLabel="Move"
           >
@@ -650,18 +714,31 @@ export default function IntegratedColoringBookApp({
                 }
                 return rows;
               })()}
-              {/* Compact color wheel section */}
+              {/* Compact color picker (wheel disabled on Android to avoid crashes) */}
               <View style={styles.wheelContainer}>
-                <ColorPicker
-                  value={selectedColor}
-                  onComplete={(c: any) => setSelectedColor(c.hex)}
-                  style={{ width: '100%' }}
-                >
-                  <Preview hideInitialColor hideText style={{ marginBottom: 10 }} />
-                  <Panel3 style={{ height: screenWidth < 380 ? 150 : 180, borderRadius: 12, width: '100%' }} />
-                  <HueSlider style={{ marginTop: 12, width: '100%' }} />
-                  <BrightnessSlider style={{ marginTop: 12, marginBottom: 4, width: '100%' }} />
-                </ColorPicker>
+                {Platform.OS === 'android' ? (
+                  // Safer native picker: use hue and brightness sliders only
+                  <ColorPicker
+                    value={selectedColor}
+                    onComplete={(c: any) => setSelectedColor(c.hex)}
+                    style={{ width: '100%' }}
+                  >
+                    <Preview hideInitialColor hideText style={{ marginBottom: 10 }} />
+                    <HueSlider style={{ marginTop: 12, width: '100%' }} />
+                    <BrightnessSlider style={{ marginTop: 12, marginBottom: 4, width: '100%' }} />
+                  </ColorPicker>
+                ) : (
+                  <ColorPicker
+                    value={selectedColor}
+                    onComplete={(c: any) => setSelectedColor(c.hex)}
+                    style={{ width: '100%' }}
+                  >
+                    <Preview hideInitialColor hideText style={{ marginBottom: 10 }} />
+                    <Panel3 style={{ height: screenWidth < 380 ? 150 : 180, borderRadius: 12, width: '100%' }} />
+                    <HueSlider style={{ marginTop: 12, width: '100%' }} />
+                    <BrightnessSlider style={{ marginTop: 12, marginBottom: 4, width: '100%' }} />
+                  </ColorPicker>
+                )}
               </View>
               <TouchableOpacity style={styles.centerModalClose} onPress={() => setShowColorTray(false)}>
                 <Text style={styles.centerModalCloseText}>Close</Text>
@@ -889,13 +966,14 @@ const styles = StyleSheet.create({
     height: 40,
   },
   actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 16,
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  gap: 8,
+  marginBottom: 16,
   },
   modernActionButton: {
-    width: 48,
-    height: 48,
+  width: 44,
+  height: 44,
     borderRadius: 24,
     backgroundColor: '#8b5cf6',
     justifyContent: 'center',
@@ -1832,5 +1910,40 @@ const styles = StyleSheet.create({
   compactSlider: {
     width: '100%',
     height: 30
+  },
+
+  // Custom Android slider
+  customSliderWrap: {
+    flex: 1,
+    paddingHorizontal: 4,
+  },
+  customSliderTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: '#E2E8F0',
+    justifyContent: 'center',
+  },
+  customSliderFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#6366f1',
+    borderTopLeftRadius: 999,
+    borderBottomLeftRadius: 999,
+  },
+  customSliderThumb: {
+    position: 'absolute',
+    top: -10,
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+    borderWidth: 3,
+    borderColor: '#4f46e5',
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 2,
   }
 });

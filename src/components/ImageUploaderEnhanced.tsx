@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -11,6 +11,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { OpenCVProcessor, type OpenCVProcessorHandle } from './OpenCVProcessor';
 
 import {
   type PngTemplate,
@@ -33,6 +36,8 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
   const [templates, setTemplates] = useState<PngTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const cvRef = useRef<OpenCVProcessorHandle>(null);
+  const [busy, setBusy] = useState(false);
 
   const categories = [
     { id: 'all', name: 'All Templates', emoji: '🎨' },
@@ -92,11 +97,67 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
   };
 
   const handleUploadImage = async () => {
-    Alert.alert(
-      'PNG Upload',
-      'Custom PNG upload is not available yet. Please use the built-in templates.'
-    );
+    try {
+      if (busy) return;
+      setBusy(true);
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permission required', 'Allow Photos/Media to pick an image.');
+        setBusy(false);
+        return;
+      }
+      const picked = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 1, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+      // SDK 49+: result has canceled; older: cancelled
+      // @ts-ignore
+      if (picked.canceled || picked.cancelled) { setBusy(false); return; }
+      const asset = (picked as any).assets ? (picked as any).assets[0] : picked;
+      const base64 = asset.base64 as string | undefined;
+      const uri = asset.uri as string;
+      if (!base64) {
+        // fallback: read as base64 from uri
+        const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        await processAndReturn(`data:image/jpeg;base64,${b64}`, uri);
+      } else {
+        const mime = asset.mimeType || 'image/jpeg';
+        await processAndReturn(`data:${mime};base64,${base64}`, uri);
+      }
+    } catch (e: any) {
+      console.warn('Upload failed', e);
+      Alert.alert('Upload failed', e?.message ?? 'Unknown error');
+    } finally {
+      setBusy(false);
+    }
   };
+
+  async function processAndReturn(dataUrl: string, originalUri: string) {
+    try {
+      // wait for OpenCV ready (simple poll)
+      let tries = 0;
+      while (!(cvRef.current?.isReady?.()) && tries < 25) {
+        await new Promise(r => setTimeout(r, 120));
+        tries++;
+      }
+      if (!cvRef.current?.isReady?.()) {
+        Alert.alert('Converter not ready', 'OpenCV failed to initialize. Ensure opencv.js exists.');
+        return;
+      }
+      const resultB64 = await cvRef.current.process(dataUrl, { method: 'canny', threshold1: 50, threshold2: 150, blur: 5, invert: true, maxSize: 1400 });
+      // persist result to a file, return file:// URI for stability
+      const filename = `colored_template_${Date.now()}.png`;
+      const path = FileSystem.cacheDirectory! + filename;
+      const b64 = resultB64.replace(/^data:image\/png;base64,/, '');
+      await FileSystem.writeAsStringAsync(path, b64, { encoding: FileSystem.EncodingType.Base64 });
+
+      // notify callbacks
+      const title = 'My Upload';
+      onImageUploaded(path, title);
+      onBitmapTemplateSelected(path, title);
+      onTemplateSelected({ bitmapUri: path, fileName: title, width: 0, height: 0, type: 'png' });
+    } catch (e: any) {
+      console.warn('Processing failed', e);
+      Alert.alert('Processing failed', e?.message ?? 'Unknown error');
+    }
+  }
 
   const filteredTemplates =
     selectedCategory === 'all'
@@ -127,6 +188,8 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
 
   return (
     <View style={styles.container}>
+  {/* Hidden OpenCV WebView processor (offline, native only) */}
+  {Platform.OS !== 'web' ? <OpenCVProcessor ref={cvRef} /> : null}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>🎨 Choose Your PNG Template!</Text>
         <Text style={styles.headerSubtitle}>
@@ -134,8 +197,8 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
         </Text>
       </View>
 
-      <TouchableOpacity style={styles.uploadButton} onPress={handleUploadImage}>
-        <Text style={styles.uploadButtonText}>📁 Upload Your Own PNG</Text>
+      <TouchableOpacity style={styles.uploadButton} onPress={handleUploadImage} disabled={busy}>
+        <Text style={styles.uploadButtonText}>{busy ? 'Processing…' : '📁 Upload Your Own Image'}</Text>
       </TouchableOpacity>
 
       <ScrollView
