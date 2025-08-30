@@ -18,30 +18,20 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-          cache: gradle
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
 
-      - name: Install pnpm
-        run: npm install -g pnpm@8 # Explicitly install pnpm globally
-
-      - name: Cache Expo CLI
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-expo-cli-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-expo-cli-
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Setup Expo CLI
-        run: npm install -g @expo/cli eas-cli # Use npm for global installation
+        run: pnpm add -g @expo/cli eas-cli
 
       - name: Generate Android project for standalone build
         run: npx expo prebuild --platform android --clean
