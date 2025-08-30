@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -11,6 +11,8 @@ import {
   TouchableOpacity,
   View,
   TextInput,
+  Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
@@ -49,13 +51,34 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
   const [saveCategory, setSaveCategory] = useState('custom');
   const [userTemplates, setUserTemplates] = useState<UserTemplate[]>([]);
 
-  const categories = [
+  const baseCategories = [
     { id: 'all', name: 'All Templates', emoji: '🎨' },
     { id: 'objects', name: 'Objects', emoji: '🎈' },
     { id: 'vehicles', name: 'Vehicles', emoji: '🚀' },
     { id: 'animals', name: 'Animals', emoji: '🐎' },
     { id: 'buildings', name: 'Buildings', emoji: '🏰' },
   ];
+  const categories = useMemo(() => {
+    // Gather unique user-defined categories (case-insensitive) and append after base ones, avoiding duplicates
+    const known = new Set(baseCategories.map(c => c.id.toLowerCase()));
+    const dyn: { id: string; name: string; emoji: string }[] = [];
+    for (const t of userTemplates) {
+      const raw = (t.category || '').trim();
+      if (!raw) continue;
+      const id = raw; // use as provided (preserve case in label)
+      const key = raw.toLowerCase();
+      if (known.has(key)) continue;
+      if (!dyn.find(d => d.id.toLowerCase() === key)) {
+        dyn.push({ id, name: raw.charAt(0).toUpperCase() + raw.slice(1), emoji: '⭐' });
+      }
+    }
+    // Put 'all' first, then built-ins (except 'all' already included), then user categories
+    return [
+      baseCategories[0],
+      ...baseCategories.slice(1),
+      ...dyn.sort((a, b) => a.name.localeCompare(b.name)),
+    ];
+  }, [userTemplates]);
 
   const difficultyColors = {
     easy: '#4CAF50',
@@ -172,6 +195,11 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
       ? templates
       : templates.filter((template) => template.category === selectedCategory);
 
+  const filteredUserTemplates =
+    selectedCategory === 'all'
+      ? userTemplates
+      : userTemplates.filter((t) => (t.category || '').trim() === selectedCategory);
+
   const useUserTemplate = (tpl: UserTemplate) => {
     onBitmapTemplateSelected(tpl.pngUri, tpl.title);
     onTemplateSelected({ bitmapUri: tpl.pngUri, fileName: tpl.title, width: 0, height: 0, type: 'png' });
@@ -247,7 +275,7 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
       >
         <View style={styles.templatesGrid}>
           {/* User templates */}
-          {userTemplates.map((tpl) => (
+          {filteredUserTemplates.map((tpl) => (
             <View key={tpl.id} style={[styles.templateCard, { width: cardWidth, marginHorizontal: cardMargin }] }>
               <View style={[styles.templateImageContainer, { height: Math.round(cardWidth * 0.66) }]}>
                 <Image source={{ uri: tpl.pngUri }} style={styles.templateImage} resizeMode="cover" />
@@ -338,15 +366,15 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
       </View>
 
       {/* Guide modal for API key and quick video */}
-      {showGuide && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+      <Modal visible={showGuide} transparent animationType="fade" onRequestClose={() => setShowGuide(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <View style={styles.modalCardLg}>
             <Text style={styles.modalTitle}>Use Gemini to generate line art</Text>
             <Text style={styles.modalText}>Sign in to Google AI Studio and create an API key. Paste it below. It stays on your device.</Text>
-            <View style={{ height: 200, borderRadius: 8, overflow: 'hidden', marginVertical: 8 }}>
+            <View style={styles.videoBox}>
               <WebView source={{ uri: 'https://youtube.com/shorts/T1BTyo1A4Ww?si=gE5halpXKayi4lPJ' }} allowsFullscreenVideo style={{ flex: 1 }} />
             </View>
-            <Text style={[styles.modalText, { marginTop: 8 }]}>Gemini API Key</Text>
+            <Text style={[styles.modalText, { marginTop: 10 }]}>Gemini API Key</Text>
             <TextInput
               value={apiKey ?? ''}
               onChangeText={(t) => setApiKey(t)}
@@ -355,41 +383,43 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
               autoCorrect={false}
               style={styles.keyInput}
             />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
-              <TouchableOpacity onPress={() => setShowGuide(false)} style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-                <Text style={{ color: '#64748B', fontWeight: '600' }}>Close</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => setShowGuide(false)} style={styles.modalBtnGhost}>
+                <Text style={styles.modalBtnGhostText}>Close</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => { const k = (apiKey || '').trim(); if (!k) { Alert.alert('API Key required', 'Please enter your Gemini API key.'); return; } SettingsService.setGeminiApiKey(k); SettingsService.setGuideSeen(true); setShowGuide(false); setTimeout(() => { handleUploadImage(); }, 50); }} style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-                <Text style={{ color: '#4ECDC4', fontWeight: '800' }}>Continue</Text>
+              <TouchableOpacity onPress={() => { const k = (apiKey || '').trim(); if (!k) { Alert.alert('API Key required', 'Please enter your Gemini API key.'); return; } SettingsService.setGeminiApiKey(k); SettingsService.setGuideSeen(true); setShowGuide(false); setTimeout(() => { handleUploadImage(); }, 50); }} style={styles.modalBtnPrimary}>
+                <Text style={styles.modalBtnPrimaryText}>Continue</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
-      )}
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Save result modal */}
-      {showSave && genResult && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+      <Modal visible={!!(showSave && genResult)} transparent animationType="fade" onRequestClose={() => setShowSave(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <View style={styles.modalCardLg}>
             <Text style={styles.modalTitle}>Save as Template</Text>
-            <View style={{ height: 180, borderRadius: 8, overflow: 'hidden', marginVertical: 8, backgroundColor: '#EEE' }}>
-              <Image source={{ uri: genResult }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+            <View style={styles.previewBox}>
+              {!!genResult && (
+                <Image source={{ uri: genResult }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+              )}
             </View>
-            <Text style={[styles.modalText, { marginTop: 8 }]}>Name</Text>
+            <Text style={[styles.modalText, { marginTop: 10 }]}>Name</Text>
             <TextInput value={saveTitle} onChangeText={setSaveTitle} style={styles.keyInput} />
-            <Text style={[styles.modalText, { marginTop: 8 }]}>Category</Text>
+            <Text style={[styles.modalText, { marginTop: 10 }]}>Category</Text>
             <TextInput value={saveCategory} onChangeText={setSaveCategory} style={styles.keyInput} />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
-              <TouchableOpacity onPress={() => { setShowSave(false); setGenResult(null); }} style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-                <Text style={{ color: '#64748B', fontWeight: '600' }}>Cancel</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => { setShowSave(false); setGenResult(null); }} style={styles.modalBtnGhost}>
+                <Text style={styles.modalBtnGhostText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleSaveTemplate} style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-                <Text style={{ color: '#4ECDC4', fontWeight: '800' }}>Save</Text>
+              <TouchableOpacity onPress={handleSaveTemplate} style={styles.modalBtnPrimary}>
+                <Text style={styles.modalBtnPrimaryText}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
-      )}
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 };
@@ -614,6 +644,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
   },
+  modalCardLg: {
+    width: '94%',
+    maxWidth: 560,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    maxHeight: '85%',
+  },
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -633,5 +672,44 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     color: '#0F172A',
     marginTop: 6,
+  },
+  videoBox: {
+    height: 220,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginVertical: 10,
+    backgroundColor: '#000',
+  },
+  previewBox: {
+    height: 220,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginVertical: 10,
+    backgroundColor: '#EEE',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 14,
+  },
+  modalBtnGhost: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginRight: 8,
+  },
+  modalBtnGhostText: {
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  modalBtnPrimary: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#4ECDC4',
+  },
+  modalBtnPrimaryText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
 });
