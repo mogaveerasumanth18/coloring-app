@@ -29,7 +29,8 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: latest
+          version: 8 # Specify a stable pnpm version to avoid compatibility issues
+          run_install: false # Prevent automatic install to avoid conflicts
 
       - name: Cache Expo CLI
         uses: actions/cache@v4
@@ -43,7 +44,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Setup Expo CLI
-        run: pnpm add -g @expo/cli eas-cli
+        run: npm install -g @expo/cli eas-cli # Use npm to ensure global installation
 
       - name: Generate Android project for standalone build
         run: npx expo prebuild --platform android --clean
