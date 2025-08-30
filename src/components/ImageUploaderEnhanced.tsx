@@ -10,11 +10,14 @@ import {
   Text,
   TouchableOpacity,
   View,
+  TextInput,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import { OpenCVProcessor, type OpenCVProcessorHandle } from './OpenCVProcessor';
-import { JSLineArtProcessor, type JSLineArtProcessorHandle } from './JSLineArtProcessor';
+import { WebView } from 'react-native-webview';
+import { SettingsService } from '../services/SettingsService';
+import { GeminiService } from '../services/GeminiService';
+import { UserTemplatesService, type UserTemplate } from '../services/UserTemplatesService';
 
 import {
   type PngTemplate,
@@ -37,9 +40,14 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
   const [templates, setTemplates] = useState<PngTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const cvRef = useRef<OpenCVProcessorHandle>(null);
-  const jsRef = useRef<JSLineArtProcessorHandle>(null);
   const [busy, setBusy] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(SettingsService.getGeminiApiKey());
+  const [showGuide, setShowGuide] = useState(false);
+  const [showSave, setShowSave] = useState(false);
+  const [genResult, setGenResult] = useState<string | null>(null);
+  const [saveTitle, setSaveTitle] = useState('My Line Art');
+  const [saveCategory, setSaveCategory] = useState('custom');
+  const [userTemplates, setUserTemplates] = useState<UserTemplate[]>([]);
 
   const categories = [
     { id: 'all', name: 'All Templates', emoji: '🎨' },
@@ -57,7 +65,8 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
 
   useEffect(() => {
     console.log('🚀 ImageUploaderEnhanced: PNG mode enabled!');
-    loadTemplates();
+  loadTemplates();
+  setUserTemplates(UserTemplatesService.list());
   }, []);
 
   const loadTemplates = async () => {
@@ -101,28 +110,33 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
   const handleUploadImage = async () => {
     try {
       if (busy) return;
+      // If first time or missing API key, show guide
+      const guideSeen = SettingsService.getGuideSeen();
+      const key = SettingsService.getGeminiApiKey();
+      if (!guideSeen || !key) {
+        setShowGuide(true);
+        return;
+      }
       setBusy(true);
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
         Alert.alert('Permission required', 'Allow Photos/Media to pick an image.');
-        setBusy(false);
         return;
       }
       const picked = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 1, mediaTypes: ImagePicker.MediaTypeOptions.Images });
       // SDK 49+: result has canceled; older: cancelled
       // @ts-ignore
-      if (picked.canceled || picked.cancelled) { setBusy(false); return; }
+      if (picked.canceled || picked.cancelled) { return; }
       const asset = (picked as any).assets ? (picked as any).assets[0] : picked;
       const base64 = asset.base64 as string | undefined;
       const uri = asset.uri as string;
-      if (!base64) {
-        // fallback: read as base64 from uri
-        const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-        await processAndReturn(`data:image/jpeg;base64,${b64}`, uri);
-      } else {
-        const mime = asset.mimeType || 'image/jpeg';
-        await processAndReturn(`data:${mime};base64,${base64}`, uri);
-      }
+      const imgB64 = base64 ?? await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      // Call Gemini to generate line art
+      const outDataUrl = await GeminiService.generateLineArt(imgB64, key!);
+      setGenResult(outDataUrl);
+      setSaveTitle('My Line Art');
+      setSaveCategory('custom');
+      setShowSave(true);
     } catch (e: any) {
       console.warn('Upload failed', e);
       Alert.alert('Upload failed', e?.message ?? 'Unknown error');
@@ -131,51 +145,37 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
     }
   };
 
-  async function processAndReturn(dataUrl: string, originalUri: string) {
+  // Save dialog actions
+  const handleSaveTemplate = async () => {
     try {
-      // wait for OpenCV ready (simple poll)
-      let tries = 0;
-      while (!(cvRef.current?.isReady?.()) && tries < 15) {
-        await new Promise(r => setTimeout(r, 120));
-        tries++;
-      }
-      let resultB64: string | null = null;
-      if (cvRef.current?.isReady?.()) {
-        resultB64 = await cvRef.current.process(dataUrl, { method: 'canny', threshold1: 50, threshold2: 150, blur: 5, invert: true, maxSize: 1400 });
-      } else {
-        // Fallback to pure-JS Sobel pipeline (no OpenCV required)
-        let tries2 = 0;
-        while (!(jsRef.current?.isReady?.()) && tries2 < 10) {
-          await new Promise(r => setTimeout(r, 120));
-          tries2++;
-        }
-        if (!jsRef.current?.isReady?.()) {
-          Alert.alert('Converter not ready', 'Image converter failed to initialize.');
-          return;
-        }
-        resultB64 = await jsRef.current.process(dataUrl, { method: 'sobel', blur: 5, threshold: 80, invert: true, maxSize: 1400, dilate: 1 });
-      }
-      // persist result to a file, return file:// URI for stability
-      const filename = `colored_template_${Date.now()}.png`;
-      const path = FileSystem.cacheDirectory! + filename;
-      const b64 = resultB64.replace(/^data:image\/png;base64,/, '');
-      await FileSystem.writeAsStringAsync(path, b64, { encoding: FileSystem.EncodingType.Base64 });
-
-      // notify callbacks
-      const title = 'My Upload';
-      onImageUploaded(path, title);
-      onBitmapTemplateSelected(path, title);
-      onTemplateSelected({ bitmapUri: path, fileName: title, width: 0, height: 0, type: 'png' });
+      if (!genResult) return;
+      const tpl = await UserTemplatesService.addFromBase64(saveTitle.trim() || 'My Line Art', saveCategory.trim() || 'custom', genResult);
+      setUserTemplates(UserTemplatesService.list());
+      setShowSave(false);
+      setGenResult(null);
+      // notify callbacks and open for coloring
+      onImageUploaded(tpl.pngUri, tpl.title);
+      onBitmapTemplateSelected(tpl.pngUri, tpl.title);
+      onTemplateSelected({ bitmapUri: tpl.pngUri, fileName: tpl.title, width: 0, height: 0, type: 'png' });
     } catch (e: any) {
-      console.warn('Processing failed', e);
-      Alert.alert('Processing failed', e?.message ?? 'Unknown error');
+      Alert.alert('Save failed', e?.message ?? 'Unknown error');
     }
-  }
+  };
+
+  const handleDeleteUserTemplate = (id: string) => {
+    UserTemplatesService.remove(id);
+    setUserTemplates(UserTemplatesService.list());
+  };
 
   const filteredTemplates =
     selectedCategory === 'all'
       ? templates
       : templates.filter((template) => template.category === selectedCategory);
+
+  const useUserTemplate = (tpl: UserTemplate) => {
+    onBitmapTemplateSelected(tpl.pngUri, tpl.title);
+    onTemplateSelected({ bitmapUri: tpl.pngUri, fileName: tpl.title, width: 0, height: 0, type: 'png' });
+  };
 
   // Responsive card width
   // Web keeps wider grids; Native prioritizes larger cards (1–2 columns on phones)
@@ -201,9 +201,7 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
 
   return (
     <View style={styles.container}>
-  {/* Hidden processors (native only). Will try OpenCV first, then fall back to pure-JS pipeline. */}
-  {Platform.OS !== 'web' ? <OpenCVProcessor ref={cvRef} /> : null}
-  {Platform.OS !== 'web' ? <JSLineArtProcessor ref={jsRef} /> : null}
+  {/* Gemini-powered upload flow. */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>🎨 Choose Your PNG Template!</Text>
         <Text style={styles.headerSubtitle}>
@@ -248,6 +246,27 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.templatesGrid}>
+          {/* User templates */}
+          {userTemplates.map((tpl) => (
+            <View key={tpl.id} style={[styles.templateCard, { width: cardWidth, marginHorizontal: cardMargin }] }>
+              <View style={[styles.templateImageContainer, { height: Math.round(cardWidth * 0.66) }]}>
+                <Image source={{ uri: tpl.pngUri }} style={styles.templateImage} resizeMode="cover" />
+              </View>
+              <View style={styles.templateInfo}>
+                <Text style={styles.templateTitle} numberOfLines={2}>{tpl.title}</Text>
+                <Text style={styles.templateDimensions}>{tpl.category} • Saved</Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12, paddingBottom: 12 }}>
+                <TouchableOpacity onPress={() => useUserTemplate(tpl)}>
+                  <Text style={{ color: '#4ECDC4', fontWeight: 'bold' }}>Use</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleDeleteUserTemplate(tpl.id)}>
+                  <Text style={{ color: '#F44336', fontWeight: 'bold' }}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+
           {filteredTemplates.map((template) => (
             <TouchableOpacity
               key={template.id}
@@ -317,6 +336,60 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
           {filteredTemplates.length} templates available
         </Text>
       </View>
+
+      {/* Guide modal for API key and quick video */}
+      {showGuide && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Use Gemini to generate line art</Text>
+            <Text style={styles.modalText}>Sign in to Google AI Studio and create an API key. Paste it below. It stays on your device.</Text>
+            <View style={{ height: 200, borderRadius: 8, overflow: 'hidden', marginVertical: 8 }}>
+              <WebView source={{ uri: 'https://youtube.com/shorts/T1BTyo1A4Ww?si=gE5halpXKayi4lPJ' }} allowsFullscreenVideo style={{ flex: 1 }} />
+            </View>
+            <Text style={[styles.modalText, { marginTop: 8 }]}>Gemini API Key</Text>
+            <TextInput
+              value={apiKey ?? ''}
+              onChangeText={(t) => setApiKey(t)}
+              placeholder="AI Studio API key"
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.keyInput}
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
+              <TouchableOpacity onPress={() => setShowGuide(false)} style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
+                <Text style={{ color: '#64748B', fontWeight: '600' }}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { const k = (apiKey || '').trim(); if (!k) { Alert.alert('API Key required', 'Please enter your Gemini API key.'); return; } SettingsService.setGeminiApiKey(k); SettingsService.setGuideSeen(true); setShowGuide(false); setTimeout(() => { handleUploadImage(); }, 50); }} style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
+                <Text style={{ color: '#4ECDC4', fontWeight: '800' }}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Save result modal */}
+      {showSave && genResult && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Save as Template</Text>
+            <View style={{ height: 180, borderRadius: 8, overflow: 'hidden', marginVertical: 8, backgroundColor: '#EEE' }}>
+              <Image source={{ uri: genResult }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+            </View>
+            <Text style={[styles.modalText, { marginTop: 8 }]}>Name</Text>
+            <TextInput value={saveTitle} onChangeText={setSaveTitle} style={styles.keyInput} />
+            <Text style={[styles.modalText, { marginTop: 8 }]}>Category</Text>
+            <TextInput value={saveCategory} onChangeText={setSaveCategory} style={styles.keyInput} />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
+              <TouchableOpacity onPress={() => { setShowSave(false); setGenResult(null); }} style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
+                <Text style={{ color: '#64748B', fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleSaveTemplate} style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
+                <Text style={{ color: '#4ECDC4', fontWeight: '800' }}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -521,5 +594,44 @@ const styles = StyleSheet.create({
   footerStats: {
     fontSize: 12,
     color: '#999',
+  },
+  // Modals
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    width: '92%',
+    maxWidth: 520,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  modalText: {
+    fontSize: 13,
+    color: '#475569',
+    marginTop: 6,
+  },
+  keyInput: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#F8FAFC',
+    color: '#0F172A',
+    marginTop: 6,
   },
 });
