@@ -7,7 +7,7 @@ export const GeminiService = {
   async generateLineArt(imageBase64Jpeg: string, apiKey: string, _params?: GeminiParams): Promise<string> {
     // For Gemini Flash image-to-image, use the Generative Language API v1beta (pseudo)
     // Here we call a generic endpoint; adapt to your chosen model/endpoint.
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${encodeURIComponent(apiKey)}`;
     const req = {
       contents: [
         {
