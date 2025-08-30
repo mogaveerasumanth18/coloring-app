@@ -162,7 +162,22 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
       setShowSave(true);
     } catch (e: any) {
       console.warn('Upload failed', e);
-      Alert.alert('Upload failed', e?.message ?? 'Unknown error');
+      const msg: string = e?.message || '';
+      const isAuth = /permission|unauthoriz|invalid|access\s?denied|api\s?key|key\s?invalid/i.test(msg);
+      const isQuota = /quota|limit|exceed|rate|billing/i.test(msg);
+      if (isAuth || isQuota) {
+        Alert.alert(
+          isAuth ? 'API key problem' : 'Quota reached',
+          'Your Gemini API key may be invalid or has reached its usage limit. Would you like to update it now?',
+          [
+            { text: 'Later', style: 'cancel' },
+            { text: 'Update key', onPress: () => setShowGuide(true) },
+            { text: 'Reset key', style: 'destructive', onPress: () => { SettingsService.clearGeminiApiKey(); setApiKey(null); setShowGuide(true); } },
+          ]
+        );
+      } else {
+        Alert.alert('Upload failed', msg || 'Unknown error');
+      }
     } finally {
       setBusy(false);
     }
@@ -240,6 +255,25 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
       <TouchableOpacity style={styles.uploadButton} onPress={handleUploadImage} disabled={busy}>
         <Text style={styles.uploadButtonText}>{busy ? 'Processing…' : '📁 Upload Your Own Image'}</Text>
       </TouchableOpacity>
+
+      {/* Manage API key controls */}
+      <View style={styles.apiKeyRow}>
+        <TouchableOpacity onPress={() => setShowGuide(true)} style={styles.manageKeyBtn}>
+          <Text style={styles.manageKeyText}>{apiKey ? 'Manage API Key' : 'Add API Key'}</Text>
+        </TouchableOpacity>
+        {apiKey ? (
+          <TouchableOpacity
+            onPress={() => {
+              SettingsService.clearGeminiApiKey();
+              setApiKey(null);
+              Alert.alert('API key cleared', 'Add a new key before the next generation.');
+            }}
+            style={styles.resetKeyBtn}
+          >
+            <Text style={styles.resetKeyText}>Reset</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
 
       <ScrollView
         horizontal
@@ -470,6 +504,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  apiKeyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    marginTop: -8,
+    marginBottom: 8,
+  },
+  manageKeyBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#E8F8F5',
+    borderWidth: 1,
+    borderColor: '#B2F1EA',
+  },
+  manageKeyText: {
+    color: '#0E9488',
+    fontWeight: '600',
+  },
+  resetKeyBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#FFF1F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  resetKeyText: {
+    color: '#DD2C2C',
+    fontWeight: '700',
   },
   categoryScroll: {
     maxHeight: 96,

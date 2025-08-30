@@ -14,6 +14,9 @@ export const SettingsService = {
   setGeminiApiKey(key: string) {
     storage.set(KEYS.GEMINI_API_KEY, key);
   },
+  clearGeminiApiKey() {
+    try { storage.delete(KEYS.GEMINI_API_KEY); } catch { storage.set(KEYS.GEMINI_API_KEY, ''); }
+  },
   getGuideSeen(): boolean {
     try { return storage.getBoolean(KEYS.GEMINI_GUIDE_SEEN) || false; } catch { return false; }
   },
