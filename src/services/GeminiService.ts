@@ -4,20 +4,25 @@ export type GeminiParams = {
 
 // Note: We won’t ship a server secret; users provide their own key.
 export const GeminiService = {
-  async generateLineArt(imageBase64Jpeg: string, apiKey: string, _params?: GeminiParams): Promise<string> {
-    // For Gemini Flash image-to-image, use the Generative Language API v1beta (pseudo)
-    // Here we call a generic endpoint; adapt to your chosen model/endpoint.
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const req = {
+  async generateLineArt(imageBase64: string, apiKey: string, mimeType: string = 'image/jpeg', _params?: GeminiParams): Promise<string> {
+    // Use Generative Language API v1beta with the image-preview model.
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const req: any = {
+      // Ask for clean line art suitable for coloring books
       contents: [
         {
+          role: 'user',
           parts: [
             { text: 'Convert this photo to clean black line-art suitable for a coloring book. White background, black outlines, no shading, no text.' },
-            { inline_data: { mime_type: 'image/jpeg', data: imageBase64Jpeg } },
+            // REST uses snake_case for request payloads
+            { inline_data: { mime_type: mimeType, data: imageBase64 } },
           ],
         },
       ],
-      // Safety/format hints could go here
+      // Prefer an image output (PNG)
+      generationConfig: {
+        response_mime_type: 'image/png',
+      },
     };
     const res = await fetch(url, {
       method: 'POST',
@@ -29,20 +34,21 @@ export const GeminiService = {
       throw new Error(`Gemini error ${res.status}: ${txt}`);
     }
     const data = await res.json();
-    // Expect image in candidates[0].content.parts[*].inline_data or base64 tool output; this varies.
-    // Try to find inline_data first
-    const parts = data?.candidates?.[0]?.content?.parts || [];
-    for (const p of parts) {
-      if (p.inline_data?.mime_type?.startsWith('image/')) {
-        const mime = p.inline_data.mime_type;
-        const b64 = p.inline_data.data;
-        // Prefer PNG output, but return whatever we got
-        const outMime = mime || 'image/png';
-        return `data:${outMime};base64,${b64}`;
-      }
-      // Sometimes the API returns a Data URL in text
-      if (typeof p.text === 'string' && p.text.startsWith('data:image/')) {
-        return p.text;
+    // Find an image either in inlineData (SDK-style) or inline_data (REST-style)
+    const candidates = data?.candidates || [];
+    for (const c of candidates) {
+      const parts = c?.content?.parts || [];
+      for (const p of parts) {
+        const inlineData = p.inlineData || p.inline_data;
+        const mt = inlineData?.mimeType || inlineData?.mime_type;
+        const b64 = inlineData?.data;
+        if (inlineData && typeof mt === 'string' && mt.startsWith('image/') && typeof b64 === 'string' && b64.length > 0) {
+          const outMime = mt || 'image/png';
+          return `data:${outMime};base64,${b64}`;
+        }
+        if (typeof p.text === 'string' && p.text.startsWith('data:image/')) {
+          return p.text;
+        }
       }
     }
     throw new Error('Gemini response missing image data');

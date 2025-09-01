@@ -153,9 +153,15 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
       const asset = (picked as any).assets ? (picked as any).assets[0] : picked;
       const base64 = asset.base64 as string | undefined;
       const uri = asset.uri as string;
-      const imgB64 = base64 ?? await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-      // Call Gemini to generate line art
-      const outDataUrl = await GeminiService.generateLineArt(imgB64, key!);
+  const imgB64 = base64 ?? await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+  // Infer MIME type from file path/extension (default jpeg)
+  let mimeType = 'image/jpeg';
+  const lower = uri.toLowerCase();
+  if (lower.endsWith('.png')) mimeType = 'image/png';
+  else if (lower.endsWith('.webp')) mimeType = 'image/webp';
+  else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mimeType = 'image/jpeg';
+  // Call Gemini to generate line art
+  const outDataUrl = await GeminiService.generateLineArt(imgB64, key!, mimeType);
       setGenResult(outDataUrl);
       setSaveTitle('My Line Art');
       setSaveCategory('custom');
