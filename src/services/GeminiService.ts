@@ -5,23 +5,24 @@ export type GeminiParams = {
 // Note: We won’t ship a server secret; users provide their own key.
 export const GeminiService = {
   async generateLineArt(imageBase64: string, apiKey: string, mimeType: string = 'image/jpeg', _params?: GeminiParams): Promise<string> {
-    // Use Generative Language API v1beta with the image-preview model.
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${encodeURIComponent(apiKey)}`;
+    // Use Generative Language API v1beta with the experimental 2.0 flash model, per reference.
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${encodeURIComponent(apiKey)}`;
     const req: any = {
-      // Ask for clean line art suitable for coloring books
+      // Prompt from reference
       contents: [
         {
           role: 'user',
           parts: [
-            { text: 'Convert this photo to clean black line-art suitable for a coloring book. White background, black outlines, no shading, no text.' },
+            { text: 'Generate a simple coloring-book outline: black closed 2D lines only, no shading, all areas flood-fillable.' },
             // REST uses snake_case for request payloads
             { inline_data: { mime_type: mimeType, data: imageBase64 } },
           ],
         },
       ],
-      // Prefer an image output (PNG)
+      // Request both text and image modalities (aligning with the SDK config in the reference)
       generationConfig: {
-        response_mime_type: 'image/png',
+        candidateCount: 1,
+        responseModalities: ['TEXT', 'IMAGE'],
       },
     };
     const res = await fetch(url, {
@@ -49,6 +50,14 @@ export const GeminiService = {
         if (typeof p.text === 'string' && p.text.startsWith('data:image/')) {
           return p.text;
         }
+      }
+      // Fallback: some responses may place inline_data at the candidate level
+      const candInline = (c as any).inlineData || (c as any).inline_data;
+      const cmt = candInline?.mimeType || candInline?.mime_type;
+      const cb64 = candInline?.data;
+      if (candInline && typeof cmt === 'string' && cmt.startsWith('image/') && typeof cb64 === 'string' && cb64.length > 0) {
+        const outMime = cmt || 'image/png';
+        return `data:${outMime};base64,${cb64}`;
       }
     }
     throw new Error('Gemini response missing image data');
