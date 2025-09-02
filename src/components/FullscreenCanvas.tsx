@@ -22,6 +22,7 @@ import * as MediaLibrary from 'expo-media-library';
 import { WorkingColoringCanvas } from './WorkingColoringCanvas';
 import { ZebraColoringCanvas } from './ZebraColoringCanvas';
 import { NativeZebraCanvas } from './NativeZebraCanvas';
+import { opacity } from 'react-native-reanimated/lib/typescript/Colors';
 
 interface FullscreenCanvasProps {
   isVisible: boolean;
@@ -146,6 +147,9 @@ export default function FullscreenCanvas({
   const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
   const [roundedCorners, setRoundedCorners] = useState(false);
   const [uiVisible, setUiVisible] = useState(true);
+  // UI density modes to control how much chrome is shown
+  const [uiMode, setUiMode] = useState<'full' | 'compact' | 'minimal'>('compact');
+  const [showZoom, setShowZoom] = useState(false); // compact: open a temporary zoom slider
 
   // Auto-hide UI shortly after entering fullscreen; can be revealed with the toggle
   useEffect(() => {
@@ -155,6 +159,11 @@ export default function FullscreenCanvas({
   }, [isVisible]);
 
   const revealUi = () => setUiVisible(true);
+  const cycleUiMode = () => {
+    setUiVisible(true);
+    setShowZoom(false);
+    setUiMode((m) => (m === 'full' ? 'compact' : m === 'compact' ? 'minimal' : 'full'));
+  };
 
   useEffect(() => {
     if (isVisible && Platform.OS !== 'web') {
@@ -277,57 +286,30 @@ export default function FullscreenCanvas({
     >
     <View style={styles.fullscreenContainer}>
       <SafeAreaView style={styles.safeArea}>
-        {/* Full Screen Canvas */}
-  <View style={[styles.canvasSection, uiVisible && styles.canvasSectionPadded]}>
+        {/* Canvas area */}
+        <View
+          style={[
+            styles.canvasSection,
+            uiVisible && (uiMode === 'full'
+              ? styles.canvasSectionPaddedFull
+              : uiMode === 'compact'
+              ? styles.canvasSectionPaddedCompact
+              : null),
+          ]}
+        >
           <View
-            style={[
-              styles.canvasContainer,
-              roundedCorners && { borderRadius: 12 },
-            ]}
+            style={[styles.canvasContainer, roundedCorners && { borderRadius: 12 }]}
             onLayout={(e) => {
               const { width, height } = e.nativeEvent.layout;
               if (width && height) setCanvasSize({ width, height });
             }}
           >
-            {(Platform.OS as any) === 'web' ? (
-              templateUri ? (
-                !templateSize ? (
-                  <View style={styles.emptyCanvas}>
-                    <Text style={styles.emptyCanvasText}>Loading image…</Text>
-                  </View>
-                ) : (
-                <View
-                  ref={captureViewRef}
-                  collapsable={false}
-                  style={{
-                    width: computeFit(canvasSize, templateSize).width,
-                    height: computeFit(canvasSize, templateSize).height,
-                    transform: [{ scale: zoom }],
-                  }}
-                >
-                  <WorkingColoringCanvas
-                    ref={canvasRef}
-                    selectedColor={currentColor}
-                    selectedTool={currentTool}
-                    brushSize={currentBrushSize}
-                    templateUri={templateUri}
-                    width={computeFit(canvasSize, templateSize).width}
-                    height={computeFit(canvasSize, templateSize).height}
-                  />
-                </View>
-                )
-              ) : (
+            {templateUri ? (
+              !templateSize ? (
                 <View style={styles.emptyCanvas}>
-                  <Text style={styles.emptyCanvasText}>Select a template to start coloring! 🎨</Text>
+                  <Text style={styles.emptyCanvasText}>Loading image…</Text>
                 </View>
-              )
-            ) : (
-              templateUri ? (
-                !templateSize ? (
-                  <View style={styles.emptyCanvas}>
-                    <Text style={styles.emptyCanvasText}>Loading image…</Text>
-                  </View>
-                ) : (
+              ) : (
                 <View
                   ref={captureViewRef}
                   collapsable={false}
@@ -337,14 +319,14 @@ export default function FullscreenCanvas({
                     transform: [{ scale: zoom }],
                   }}
                 >
-                  {(Platform.OS as any) === 'web' ? (
-                    <ZebraColoringCanvas
-                      ref={canvasRef}
-                      templateUri={templateUri}
+                  {Platform.OS === 'web' ? (
+                    <WorkingColoringCanvas
                       selectedColor={currentColor}
                       selectedTool={currentTool}
                       brushSize={currentBrushSize}
-                      onColoringChange={onColoringChange}
+                      templateUri={templateUri}
+                      width={computeFit(canvasSize, templateSize).width}
+                      height={computeFit(canvasSize, templateSize).height}
                     />
                   ) : (
                     <NativeZebraCanvas
@@ -359,169 +341,188 @@ export default function FullscreenCanvas({
                     />
                   )}
                 </View>
-                )
-              ) : (
-                <View style={styles.emptyCanvas}>
-                  <Text style={styles.emptyCanvasText}>Select a template to start coloring! 🎨</Text>
-                </View>
               )
+            ) : (
+              <View style={styles.emptyCanvas}>
+                <Text style={styles.emptyCanvasText}>Select a template to start coloring! 🎨</Text>
+              </View>
             )}
           </View>
         </View>
 
-        {/* Top toolbar (compact) */}
-        <View
-          style={[
-            styles.topActionsContainer,
-            { opacity: uiVisible ? 1 : 0 },
-          ]}
-          pointerEvents={uiVisible ? 'auto' : 'none'}
-        >
-          <View style={styles.actionRow}>
-            {/* First Row - Undo, Redo, Zoom */}
-            <TouchableOpacity style={styles.actionButton} onPress={() => canvasRef.current?.undo?.()}>
-              <Ionicons name="arrow-undo" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Undo</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.actionButton} onPress={() => canvasRef.current?.redo?.()}>
-              <Ionicons name="arrow-redo" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Redo</Text>
-            </TouchableOpacity>
-            
-              <TouchableOpacity style={styles.actionButton} onPress={() => setZoom(prev => clampZoom(prev + 0.25))}>
-              <Feather name="zoom-in" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Zoom In</Text>
-            </TouchableOpacity>
-            
-              <TouchableOpacity style={styles.actionButton} onPress={() => setZoom(prev => clampZoom(prev - 0.25))}>
-              <Feather name="zoom-out" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Zoom Out</Text>
-            </TouchableOpacity>
-            
-            <View style={styles.zoomIndicator}>
-              <Text style={styles.zoomText}>{Math.round(zoom * 100)}%</Text>
-            </View>
-              <TouchableOpacity style={styles.actionButton} onPress={() => setZoom(1)}>
-                <Feather name="refresh-ccw" size={18} color="#ffffff" />
-                <Text style={styles.actionButtonText}>Reset</Text>
+        {/* Top toolbar */}
+        {uiMode !== 'minimal' && (
+          <View
+            style={[styles.topActionsContainer, { opacity: uiVisible ? 1 : 0 }]}
+            pointerEvents={uiVisible ? 'auto' : 'none'}
+          >
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
+                onPress={() => canvasRef.current?.undo?.()}
+              >
+                <Ionicons name="arrow-undo" size={18} color="#ffffff" />
+                {uiMode === 'full' && <Text style={styles.actionButtonText}>Undo</Text>}
               </TouchableOpacity>
-            {/* Rounded corners toggle */}
-            <TouchableOpacity
-              style={[styles.actionButton, roundedCorners && styles.activeActionButton]}
-              onPress={() => setRoundedCorners((v) => !v)}
-            >
-              <Feather name="corner-right-down" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>{roundedCorners ? 'Rounded' : 'Square'}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Bottom dock - tools */}
-        <View
-          style={[
-            styles.bottomDock,
-            { opacity: uiVisible ? 1 : 0 },
-          ]}
-          pointerEvents={uiVisible ? 'auto' : 'none'}
-        >
-          <View style={styles.actionRow}>
-            <TouchableOpacity 
-              style={[styles.actionButton, currentTool === 'brush' && styles.activeActionButton]} 
-              onPress={() => setCurrentTool('brush')}
-            >
-              <MaterialIcons name="brush" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Paint</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.actionButton, currentTool === 'bucket' && styles.activeActionButton]} 
-              onPress={() => setCurrentTool('bucket')}
-            >
-              <MaterialIcons name="format-color-fill" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Fill</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.actionButton, currentTool === 'eraser' && styles.activeActionButton]} 
-              onPress={() => setCurrentTool('eraser')}
-            >
-              <MaterialIcons name="auto-fix-off" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Eraser</Text>
-            </TouchableOpacity>
-
-            <View style={styles.sizeControl}>
-              <Text style={styles.sizeLabel}>Size:</Text>
-              <View style={styles.sizeIndicator}>
-                <View style={[styles.sizeDot, { 
-                  width: Math.max(8, Math.min(currentBrushSize, 20)),
-                  height: Math.max(8, Math.min(currentBrushSize, 20)),
-                }]} />
+              <TouchableOpacity
+                style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
+                onPress={() => canvasRef.current?.redo?.()}
+              >
+                <Ionicons name="arrow-redo" size={18} color="#ffffff" />
+                {uiMode === 'full' && <Text style={styles.actionButtonText}>Redo</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
+                onPress={() => setZoom((prev) => clampZoom(prev + 0.25))}
+              >
+                <Feather name="zoom-in" size={18} color="#ffffff" />
+                {uiMode === 'full' && <Text style={styles.actionButtonText}>Zoom In</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
+                onPress={() => setZoom((prev) => clampZoom(prev - 0.25))}
+              >
+                <Feather name="zoom-out" size={18} color="#ffffff" />
+                {uiMode === 'full' && <Text style={styles.actionButtonText}>Zoom Out</Text>}
+              </TouchableOpacity>
+              <View style={styles.zoomIndicator}>
+                <Text style={styles.zoomText}>{Math.round(zoom * 100)}%</Text>
               </View>
-              <Text style={styles.sizeText}>{currentBrushSize}px</Text>
+              <TouchableOpacity
+                style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
+                onPress={() => setZoom(1)}
+              >
+                <Feather name="refresh-ccw" size={18} color="#ffffff" />
+                {uiMode === 'full' && <Text style={styles.actionButtonText}>Reset</Text>}
+              </TouchableOpacity>
+              {uiMode === 'compact' && (
+                <TouchableOpacity style={styles.smallActionButton} onPress={() => setShowZoom((v) => !v)}>
+                  <Feather name="sliders" size={18} color="#ffffff" />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[uiMode === 'compact' ? styles.smallActionButton : styles.actionButton, roundedCorners && styles.activeActionButton]}
+                onPress={() => setRoundedCorners((v) => !v)}
+              >
+                <Feather name="corner-right-down" size={18} color="#ffffff" />
+                {uiMode === 'full' && <Text style={styles.actionButtonText}>Corners</Text>}
+              </TouchableOpacity>
             </View>
+          </View>
+        )}
 
-            <TouchableOpacity style={styles.colorPickerButton} onPress={() => setShowColorPicker(true)}>
-              <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
-              <Text style={styles.actionButtonText}>Color</Text>
+        {/* Bottom dock */}
+        {uiMode !== 'minimal' && (
+          <View
+            style={[styles.bottomDock, { opacity: uiVisible ? 1 : 0 }]}
+            pointerEvents={uiVisible ? 'auto' : 'none'}
+          >
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[uiMode === 'compact' ? styles.smallActionButton : styles.actionButton, currentTool === 'brush' && styles.activeActionButton]}
+                onPress={() => setCurrentTool('brush')}
+              >
+                <MaterialIcons name="brush" size={18} color="#ffffff" />
+                {uiMode === 'full' && <Text style={styles.actionButtonText}>Paint</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[uiMode === 'compact' ? styles.smallActionButton : styles.actionButton, currentTool === 'bucket' && styles.activeActionButton]}
+                onPress={() => setCurrentTool('bucket')}
+              >
+                <MaterialIcons name="format-color-fill" size={18} color="#ffffff" />
+                {uiMode === 'full' && <Text style={styles.actionButtonText}>Fill</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[uiMode === 'compact' ? styles.smallActionButton : styles.actionButton, currentTool === 'eraser' && styles.activeActionButton]}
+                onPress={() => setCurrentTool('eraser')}
+              >
+                <MaterialIcons name="auto-fix-off" size={18} color="#ffffff" />
+                {uiMode === 'full' && <Text style={styles.actionButtonText}>Eraser</Text>}
+              </TouchableOpacity>
+              {uiMode === 'full' && (
+                <View style={styles.sizeControl}>
+                  <Text style={styles.sizeLabel}>Size:</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={uiMode === 'compact' ? styles.smallActionButton : styles.colorPickerButton}
+                onPress={() => setShowColorPicker(true)}
+              >
+                <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
+                {uiMode === 'full' && <Text style={styles.actionButtonText}>Color</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Zoom slider overlay */}
+        {(uiMode === 'full' || (uiMode === 'compact' && showZoom)) && (
+          <View
+            style={[styles.sliderOverlay, { opacity: uiVisible ? 1 : 0 }]}
+            pointerEvents={uiVisible ? 'auto' : 'none'}
+          >
+            <Text style={styles.sliderLabel}>Zoom</Text>
+            <Slider
+              style={styles.zoomSlider}
+              minimumValue={MIN_ZOOM}
+              maximumValue={MAX_ZOOM}
+              value={zoom}
+              step={0.01}
+              onValueChange={(v: number) => setZoom(clampZoom(v))}
+              minimumTrackTintColor="#6366f1"
+              maximumTrackTintColor="#CBD5E1"
+              thumbTintColor="#6366f1"
+            />
+          </View>
+        )}
+
+        {/* Bottom actions or minimal FABs */}
+        {uiMode !== 'minimal' ? (
+          <View
+            style={[styles.bottomActionsContainer, { opacity: uiVisible ? 1 : 0 }]}
+            pointerEvents={uiVisible ? 'auto' : 'none'}
+          >
+            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+              <Feather name="save" size={18} color="#ffffff" />
+              <Text style={styles.actionButtonText}>Save</Text>
+            </TouchableOpacity>
+            {uiMode === 'full' && (
+              <TouchableOpacity style={styles.clearButton} onPress={() => canvasRef.current?.clear?.()}>
+                <MaterialIcons name="clear" size={18} color="#ffffff" />
+                <Text style={styles.actionButtonText}>Clear</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.exitButton} onPress={handleClose}>
+              <Feather name="minimize-2" size={18} color="#ffffff" />
+              <Text style={styles.actionButtonText}>Exit</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        ) : (
+          <View style={styles.miniFabCluster} pointerEvents={'auto'}>
+            <TouchableOpacity style={styles.miniFab} onPress={handleSave}>
+              <Feather name="save" size={18} color="#111827" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.miniFab} onPress={handleClose}>
+              <Feather name="x" size={18} color="#111827" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.miniFab, styles.miniFabPrimary]}
+              onPress={() => {
+                setUiMode('compact');
+                setUiVisible(true);
+              }}
+            >
+              <Feather name="tool" size={18} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+        )}
 
-        {/* Zoom slider - bottom center */}
-        <View
-          style={[
-            styles.sliderOverlay,
-            { opacity: uiVisible ? 1 : 0 },
-          ]}
-          pointerEvents={uiVisible ? 'auto' : 'none'}
-        >
-          <Text style={styles.sliderLabel}>Zoom</Text>
-          <Slider
-            style={styles.zoomSlider}
-            minimumValue={MIN_ZOOM}
-            maximumValue={MAX_ZOOM}
-            value={zoom}
-            step={0.01}
-            onValueChange={(v: number) => setZoom(clampZoom(v))}
-            minimumTrackTintColor="#6366f1"
-            maximumTrackTintColor="#CBD5E1"
-            thumbTintColor="#6366f1"
-          />
-        </View>
-
-        {/* Bottom Actions */}
-        <View
-          style={[
-            styles.bottomActionsContainer,
-            { opacity: uiVisible ? 1 : 0 },
-          ]}
-          pointerEvents={uiVisible ? 'auto' : 'none'}
-        >
-          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-            <Feather name="save" size={18} color="#ffffff" />
-            <Text style={styles.actionButtonText}>Save</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.clearButton} onPress={() => canvasRef.current?.clear?.()}>
-            <MaterialIcons name="clear" size={18} color="#ffffff" />
-            <Text style={styles.actionButtonText}>Clear</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.exitButton} onPress={handleClose}>
-            <Feather name="minimize-2" size={18} color="#ffffff" />
-            <Text style={styles.actionButtonText}>Exit</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* UI toggle chip (always accessible) */}
-        <TouchableOpacity
-          style={styles.uiToggle}
-          onPress={() => setUiVisible(!uiVisible)}
-          activeOpacity={0.9}
-        >
-          <Feather name={uiVisible ? 'eye-off' : 'eye'} size={14} color="#111827" />
-          <Text style={styles.uiToggleText}>{uiVisible ? 'Hide' : 'Controls'}</Text>
+        {/* UI mode toggle chip */}
+        <TouchableOpacity style={styles.uiToggle} onPress={cycleUiMode} activeOpacity={0.9}>
+          <Feather name={uiMode === 'minimal' ? 'eye' : 'eye-off'} size={14} color="#111827" />
+          <Text style={styles.uiToggleText}>
+            {uiMode === 'full' ? 'Full' : uiMode === 'compact' ? 'Compact' : 'Minimal'}
+          </Text>
         </TouchableOpacity>
       </SafeAreaView>
 
@@ -532,22 +533,14 @@ export default function FullscreenCanvas({
         animationType="fade"
         onRequestClose={() => setShowColorPicker(false)}
       >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
-          onPress={() => setShowColorPicker(false)}
-        >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowColorPicker(false)}>
           <View style={styles.colorPickerModal}>
             <Text style={styles.colorPickerTitle}>Choose Color</Text>
             <ScrollView contentContainerStyle={styles.colorGrid} showsVerticalScrollIndicator={false}>
               {colors.map((color) => (
                 <TouchableOpacity
                   key={color}
-                  style={[
-                    styles.colorOption,
-                    { backgroundColor: color },
-                    currentColor === color && styles.selectedColorOption,
-                  ]}
+                  style={[styles.colorOption, { backgroundColor: color }, currentColor === color && styles.selectedColorOption]}
                   onPress={() => {
                     setCurrentColor(color);
                     setShowColorPicker(false);
@@ -578,10 +571,15 @@ const styles = StyleSheet.create({
   paddingHorizontal: 10,
   paddingVertical: 10,
   },
-  canvasSectionPadded: {
-    // Reserve space so overlays do not cover the drawable area
+  canvasSectionPaddedFull: {
+    // Reserve space so overlays do not cover the drawable area (full UI)
     paddingTop: 72,
     paddingBottom: 140,
+  },
+  canvasSectionPaddedCompact: {
+    // Smaller paddings in compact UI
+    paddingTop: 48,
+    paddingBottom: 96,
   },
   canvasContainer: {
   backgroundColor: '#ffffff',
@@ -639,6 +637,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  smallActionButton: {
+    backgroundColor: '#6366f1',
+    borderRadius: 18,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
   },
   activeActionButton: {
     backgroundColor: '#4f46e5',
@@ -759,6 +771,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     zIndex: 10,
+  },
+  miniFabCluster: {
+    position: 'absolute',
+    bottom: 24,
+    right: 16,
+    flexDirection: 'column',
+    gap: 12,
+    zIndex: 10,
+  },
+  miniFab: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  miniFabPrimary: {
+    backgroundColor: '#6366f1',
   },
   saveButton: {
     backgroundColor: '#10b981',
