@@ -22,7 +22,7 @@ import * as MediaLibrary from 'expo-media-library';
 import { WorkingColoringCanvas } from './WorkingColoringCanvas';
 import { ZebraColoringCanvas } from './ZebraColoringCanvas';
 import { NativeZebraCanvas } from './NativeZebraCanvas';
-import { opacity } from 'react-native-reanimated/lib/typescript/Colors';
+// (removed unused reanimated Colors import)
 
 interface FullscreenCanvasProps {
   isVisible: boolean;
@@ -150,6 +150,7 @@ export default function FullscreenCanvas({
   // UI density modes to control how much chrome is shown
   const [uiMode, setUiMode] = useState<'full' | 'compact' | 'minimal'>('compact');
   const [showZoom, setShowZoom] = useState(false); // compact: open a temporary zoom slider
+  const [toolsVisible, setToolsVisible] = useState(false); // bottom tools panel collapsed by default
 
   // Auto-hide UI shortly after entering fullscreen; can be revealed with the toggle
   useEffect(() => {
@@ -411,111 +412,66 @@ export default function FullscreenCanvas({
           </View>
         )}
 
-        {/* Bottom dock */}
+  {/* Bottom dock removed; replaced by collapsible Tools panel below */}
+
+        {/* Bottom tools: collapsed handle -> expandable panel */}
         {uiMode !== 'minimal' && (
-          <View
-            style={[styles.bottomDock, { opacity: uiVisible ? 1 : 0 }]}
-            pointerEvents={uiVisible ? 'auto' : 'none'}
-          >
-            <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={[uiMode === 'compact' ? styles.smallActionButton : styles.actionButton, currentTool === 'brush' && styles.activeActionButton]}
-                onPress={() => setCurrentTool('brush')}
-              >
-                <MaterialIcons name="brush" size={18} color="#ffffff" />
-                {uiMode === 'full' && <Text style={styles.actionButtonText}>Paint</Text>}
+          <View style={styles.toolsHandleContainer} pointerEvents={'auto'}>
+            {!toolsVisible ? (
+              <TouchableOpacity style={styles.toolsHandle} onPress={() => setToolsVisible(true)}>
+                <Feather name="chevron-up" size={16} color="#111827" />
+                <Text style={styles.toolsHandleText}>Tools</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[uiMode === 'compact' ? styles.smallActionButton : styles.actionButton, currentTool === 'bucket' && styles.activeActionButton]}
-                onPress={() => setCurrentTool('bucket')}
-              >
-                <MaterialIcons name="format-color-fill" size={18} color="#ffffff" />
-                {uiMode === 'full' && <Text style={styles.actionButtonText}>Fill</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[uiMode === 'compact' ? styles.smallActionButton : styles.actionButton, currentTool === 'eraser' && styles.activeActionButton]}
-                onPress={() => setCurrentTool('eraser')}
-              >
-                <MaterialIcons name="auto-fix-off" size={18} color="#ffffff" />
-                {uiMode === 'full' && <Text style={styles.actionButtonText}>Eraser</Text>}
-              </TouchableOpacity>
-              {uiMode === 'full' && (
-                <View style={styles.sizeControl}>
-                  <Text style={styles.sizeLabel}>Size:</Text>
+            ) : (
+              <View style={styles.toolsPanel}>
+                <View style={styles.toolsRow}>
+                  <TouchableOpacity
+                    style={[styles.toolChip, currentTool === 'brush' && styles.toolChipActive]}
+                    onPress={() => setCurrentTool('brush')}
+                  >
+                    <MaterialIcons name="brush" size={18} color="#ffffff" />
+                    <Text style={styles.toolChipText}>Paint</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.toolChip, currentTool === 'bucket' && styles.toolChipActive]}
+                    onPress={() => setCurrentTool('bucket')}
+                  >
+                    <MaterialIcons name="format-color-fill" size={18} color="#ffffff" />
+                    <Text style={styles.toolChipText}>Fill</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.toolChip, currentTool === 'eraser' && styles.toolChipActive]}
+                    onPress={() => setCurrentTool('eraser')}
+                  >
+                    <MaterialIcons name="auto-fix-off" size={18} color="#ffffff" />
+                    <Text style={styles.toolChipText}>Eraser</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.toolChip} onPress={() => setShowColorPicker(true)}>
+                    <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
+                    <Text style={styles.toolChipText}>Color</Text>
+                  </TouchableOpacity>
                 </View>
-              )}
-              <TouchableOpacity
-                style={uiMode === 'compact' ? styles.smallActionButton : styles.colorPickerButton}
-                onPress={() => setShowColorPicker(true)}
-              >
-                <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
-                {uiMode === 'full' && <Text style={styles.actionButtonText}>Color</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Zoom slider overlay */}
-        {(uiMode === 'full' || (uiMode === 'compact' && showZoom)) && (
-          <View
-            style={[styles.sliderOverlay, { opacity: uiVisible ? 1 : 0 }]}
-            pointerEvents={uiVisible ? 'auto' : 'none'}
-          >
-            <Text style={styles.sliderLabel}>Zoom</Text>
-            <Slider
-              style={styles.zoomSlider}
-              minimumValue={MIN_ZOOM}
-              maximumValue={MAX_ZOOM}
-              value={zoom}
-              step={0.01}
-              onValueChange={(v: number) => setZoom(clampZoom(v))}
-              minimumTrackTintColor="#6366f1"
-              maximumTrackTintColor="#CBD5E1"
-              thumbTintColor="#6366f1"
-            />
-          </View>
-        )}
-
-        {/* Bottom actions or minimal FABs */}
-        {uiMode !== 'minimal' ? (
-          <View
-            style={[styles.bottomActionsContainer, { opacity: uiVisible ? 1 : 0 }]}
-            pointerEvents={uiVisible ? 'auto' : 'none'}
-          >
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-              <Feather name="save" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Save</Text>
-            </TouchableOpacity>
-            {uiMode === 'full' && (
-              <TouchableOpacity style={styles.clearButton} onPress={() => canvasRef.current?.clear?.()}>
-                <MaterialIcons name="clear" size={18} color="#ffffff" />
-                <Text style={styles.actionButtonText}>Clear</Text>
-              </TouchableOpacity>
+                <View style={styles.toolsRow}>
+                  <Text style={styles.sizeLabel}>Size: {Math.round(currentBrushSize)}px</Text>
+                  <Slider
+                    style={styles.sizeSlider}
+                    minimumValue={2}
+                    maximumValue={50}
+                    value={currentBrushSize}
+                    step={1}
+                    onValueChange={(v: number) => setCurrentBrushSize(v)}
+                    minimumTrackTintColor="#6366f1"
+                    maximumTrackTintColor="#CBD5E1"
+                    thumbTintColor="#6366f1"
+                  />
+                  <TouchableOpacity style={styles.toolsCollapse} onPress={() => setToolsVisible(false)}>
+                    <Feather name="chevron-down" size={16} color="#111827" />
+                  </TouchableOpacity>
+                </View>
+              </View>
             )}
-            <TouchableOpacity style={styles.exitButton} onPress={handleClose}>
-              <Feather name="minimize-2" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Exit</Text>
-            </TouchableOpacity>
           </View>
-        ) : (
-          <View style={styles.miniFabCluster} pointerEvents={'auto'}>
-            <TouchableOpacity style={styles.miniFab} onPress={handleSave}>
-              <Feather name="save" size={18} color="#111827" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.miniFab} onPress={handleClose}>
-              <Feather name="x" size={18} color="#111827" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.miniFab, styles.miniFabPrimary]}
-              onPress={() => {
-                setUiMode('compact');
-                setUiVisible(true);
-              }}
-            >
-              <Feather name="tool" size={18} color="#ffffff" />
-            </TouchableOpacity>
-          </View>
-        )}
+  )}
 
         {/* UI mode toggle chip */}
         <TouchableOpacity style={styles.uiToggle} onPress={cycleUiMode} activeOpacity={0.9}>
@@ -751,6 +707,80 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 2,
     borderColor: '#ffffff',
+  },
+  
+  // Collapsible Tools panel
+  toolsHandleContainer: {
+    position: 'absolute',
+    bottom: 24,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 12,
+  },
+  toolsHandle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  toolsHandleText: {
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  toolsPanel: {
+    backgroundColor: 'rgba(255,255,255,0.98)',
+    borderRadius: 16,
+    padding: 12,
+    marginHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  toolsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginVertical: 4,
+  },
+  toolChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#9ca3af',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  toolChipActive: {
+    backgroundColor: '#6366f1',
+  },
+  toolChipText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sizeSlider: {
+    flex: 1,
+    height: 32,
+    marginHorizontal: 8,
+  },
+  toolsCollapse: {
+    padding: 8,
+    backgroundColor: 'rgba(226,232,240,0.9)',
+    borderRadius: 14,
   },
   
   // Bottom dock - tools row
