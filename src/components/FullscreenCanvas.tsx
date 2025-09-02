@@ -133,7 +133,7 @@ export default function FullscreenCanvas({
     }
   };
 
-  if (!isVisible) return null;
+  // Use a full-screen Modal so the overlay truly covers the entire screen
 
   // Full bleed canvas: let container flex and fill; child receives width/height via onLayout
   const [canvasSize, setCanvasSize] = useState<{ width: number; height: number }>({
@@ -165,6 +165,16 @@ export default function FullscreenCanvas({
   };
 
   return (
+    <Modal
+      visible={isVisible}
+      transparent={false}
+      animationType="fade"
+      presentationStyle="fullScreen"
+      onRequestClose={handleClose}
+      // iOS hint; Android will follow lockAsync
+      supportedOrientations={["landscape", "landscape-left", "landscape-right"]}
+      statusBarTranslucent
+    >
     <View style={styles.fullscreenContainer}>
       <SafeAreaView style={styles.safeArea}>
         {/* Full Screen Canvas */}
@@ -403,18 +413,14 @@ export default function FullscreenCanvas({
         </TouchableOpacity>
       </Modal>
     </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   fullscreenContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  flex: 1,
     backgroundColor: '#000000',
-    zIndex: 1000,
   },
   safeArea: {
     flex: 1,
