@@ -44,6 +44,21 @@ interface ColoringBitmap {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DEFAULT_CANVAS_SIZE = Math.min(SCREEN_WIDTH - 40, 400);
 
+// Fit an image of size (iw, ih) into a box (bw, bh) preserving aspect ratio
+function fitIntoBox(iw: number, ih: number, bw: number, bh: number) {
+  if (!bw || !bh) return { width: iw, height: ih };
+  const arImg = iw / ih;
+  const arBox = bw / bh;
+  if (arImg > arBox) {
+    const width = bw;
+    const height = Math.round(bw / arImg);
+    return { width, height };
+  }
+  const height = bh;
+  const width = Math.round(bh * arImg);
+  return { width, height };
+}
+
 export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>(({
   templateUri,
   selectedColor = '#FF6B6B',
@@ -209,47 +224,20 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         imgHeight = decoded.height;
       }
 
-      // Scale the template to fit the provided canvas dimensions
-      let scaledImageData = imageData;
-      let finalWidth = imgWidth;
-      let finalHeight = imgHeight;
+      // Keep original bitmap to avoid distortion; only the view size fits inside requested box
+      const viewBoxW = width || DEFAULT_CANVAS_SIZE;
+      const viewBoxH = height || DEFAULT_CANVAS_SIZE;
+      const fitted = fitIntoBox(imgWidth, imgHeight, viewBoxW, viewBoxH);
 
-      if (width && height && (width !== imgWidth || height !== imgHeight)) {
-        // Scale the image data to match the requested canvas size
-        console.log(`🔧 Scaling template from ${imgWidth}x${imgHeight} to ${width}x${height}`);
-        
-        finalWidth = width;
-        finalHeight = height;
-        scaledImageData = new Uint8Array(width * height * 4);
-        
-        // Simple nearest-neighbor scaling
-        const scaleX = imgWidth / width;
-        const scaleY = imgHeight / height;
-        
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            const srcX = Math.floor(x * scaleX);
-            const srcY = Math.floor(y * scaleY);
-            const srcIndex = (srcY * imgWidth + srcX) * 4;
-            const destIndex = (y * width + x) * 4;
-            
-            scaledImageData[destIndex] = imageData[srcIndex];
-            scaledImageData[destIndex + 1] = imageData[srcIndex + 1];
-            scaledImageData[destIndex + 2] = imageData[srcIndex + 2];
-            scaledImageData[destIndex + 3] = imageData[srcIndex + 3];
-          }
-        }
-      }
-
-  const newBitmap: ColoringBitmap = {
-        width: finalWidth,
-        height: finalHeight,
-        data: scaledImageData,
+      const newBitmap: ColoringBitmap = {
+        width: imgWidth,
+        height: imgHeight,
+        data: imageData,
       };
 
       setBitmap(newBitmap);
       setOriginalTemplate(cloneBitmap(newBitmap)); // Store original template for eraser
-      setCanvasSize({ width: finalWidth, height: finalHeight });
+  setCanvasSize({ width: fitted.width, height: fitted.height });
   // Build robust masks from the loaded template
   boundaryMaskRef.current = computeBoundaryMask(newBitmap);
   strongBoundaryMaskRef.current = computeStrongBoundaryMask(newBitmap);
@@ -268,8 +256,11 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   }, [templateUri, initialDataUrl, width, height, updateDataUrl, cloneBitmap]);
 
   const createFallbackTemplate = useCallback(async () => {
-    const templateWidth = width || DEFAULT_CANVAS_SIZE;
-    const templateHeight = height || DEFAULT_CANVAS_SIZE;
+  const viewBoxW = width || DEFAULT_CANVAS_SIZE;
+  const viewBoxH = height || DEFAULT_CANVAS_SIZE;
+  // Generate a square fallback bitmap but fit its display into the requested box
+  const templateWidth = Math.min(viewBoxW, viewBoxH);
+  const templateHeight = Math.min(viewBoxW, viewBoxH);
     const pixelCount = templateWidth * templateHeight;
     const fallbackData = new Uint8Array(pixelCount * 4);
 
@@ -313,7 +304,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     setBitmap(fallbackBitmap);
     setOriginalTemplate(cloneBitmap(fallbackBitmap)); // Store original template for eraser
     // Use provided dimensions for fullscreen mode
-    setCanvasSize({ width: templateWidth, height: templateHeight });
+  const fitted = fitIntoBox(templateWidth, templateHeight, viewBoxW, viewBoxH);
+  setCanvasSize({ width: fitted.width, height: fitted.height });
   // Build boundary masks for fallback as well
   boundaryMaskRef.current = computeBoundaryMask(fallbackBitmap);
   strongBoundaryMaskRef.current = computeStrongBoundaryMask(fallbackBitmap);

@@ -36,6 +36,89 @@ interface FullscreenCanvasProps {
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
+// --- Helpers to extract intrinsic image size from data URLs ---
+function decodeBase64Prefix(b64: string, maxBytes: number): Uint8Array {
+  const table: Record<string, number> = {};
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  for (let i = 0; i < chars.length; i++) table[chars[i]] = i;
+  const out: number[] = [];
+  let buffer = 0;
+  let bits = 0;
+  for (let i = 0; i < b64.length && out.length < maxBytes; i++) {
+    const c = b64[i];
+    if (c === '=') break;
+    const val = table[c];
+    if (val === undefined) continue; // skip non-base64
+    buffer = (buffer << 6) | val;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push((buffer >> bits) & 0xff);
+    }
+  }
+  return Uint8Array.from(out);
+}
+
+function readU32BE(bytes: Uint8Array, off: number): number {
+  return ((bytes[off] << 24) | (bytes[off + 1] << 16) | (bytes[off + 2] << 8) | bytes[off + 3]) >>> 0;
+}
+
+function tryParsePNG(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 24) return null;
+  const sig = [137, 80, 78, 71, 13, 10, 26, 10];
+  for (let i = 0; i < 8; i++) if (bytes[i] !== sig[i]) return null;
+  // IHDR width/height at byte 16..23
+  const w = readU32BE(bytes, 16);
+  const h = readU32BE(bytes, 20);
+  if (w > 0 && h > 0) return { width: w, height: h };
+  return null;
+}
+
+function tryParseJPEG(bytes: Uint8Array): { width: number; height: number } | null {
+  // Minimal SOF scanner; need more than 2KB sometimes; we decode prefix generously in caller
+  if (bytes.length < 4) return null;
+  if (!(bytes[0] === 0xff && bytes[1] === 0xd8)) return null; // SOI
+  let i = 2;
+  while (i + 9 < bytes.length) {
+    if (bytes[i] !== 0xff) { i++; continue; }
+    let marker = bytes[i + 1];
+    i += 2;
+    // Skip fill bytes 0xFF
+    while (marker === 0xff && i < bytes.length) { marker = bytes[i]; i++; }
+    if (i + 1 >= bytes.length) break;
+    const len = (bytes[i] << 8) | bytes[i + 1];
+    if (len < 2 || i + len >= bytes.length) break;
+    // SOF0..SOF3, SOF5..SOF7, SOF9..SOF11, SOF13..SOF15
+    if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {
+      if (i + 7 < bytes.length) {
+        const h = (bytes[i + 3] << 8) | bytes[i + 4];
+        const w = (bytes[i + 5] << 8) | bytes[i + 6];
+        if (w > 0 && h > 0) return { width: w, height: h };
+      }
+      break;
+    }
+    i += len;
+  }
+  return null;
+}
+
+function tryGetDataUrlSize(uri: string): { width: number; height: number } | null {
+  if (!uri.startsWith('data:image/')) return null;
+  const comma = uri.indexOf(',');
+  if (comma < 0) return null;
+  const meta = uri.slice(5, comma); // image/png;base64
+  const b64 = uri.slice(comma + 1);
+  // Decode up to 16KB which should be plenty to reach IHDR or SOF
+  const prefix = decodeBase64Prefix(b64, 16 * 1024);
+  if (meta.includes('png')) {
+    const s = tryParsePNG(prefix);
+    if (s) return s;
+  }
+  // Try JPEG
+  const s2 = tryParseJPEG(prefix);
+  return s2;
+}
+
 export default function FullscreenCanvas({
   isVisible,
   onClose,
@@ -62,6 +145,16 @@ export default function FullscreenCanvas({
   const captureViewRef = useRef<View>(null);
   const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
   const [roundedCorners, setRoundedCorners] = useState(false);
+  const [uiVisible, setUiVisible] = useState(true);
+
+  // Auto-hide UI shortly after entering fullscreen; can be revealed with the toggle
+  useEffect(() => {
+    if (!isVisible) return;
+    const t = setTimeout(() => setUiVisible(false), 2500);
+    return () => clearTimeout(t);
+  }, [isVisible]);
+
+  const revealUi = () => setUiVisible(true);
 
   useEffect(() => {
     if (isVisible && Platform.OS !== 'web') {
@@ -85,6 +178,13 @@ export default function FullscreenCanvas({
       setTemplateSize(null);
       return;
     }
+    // If it's a data URL, try to parse dimensions directly to avoid layout flicker
+    const parsed = tryGetDataUrlSize(templateUri);
+    if (parsed) {
+      setTemplateSize(parsed);
+      return;
+    }
+    // Fallback to Image.getSize for file/http URIs
     Image.getSize(
       templateUri,
       (w, h) => setTemplateSize({ width: w, height: h }),
@@ -178,7 +278,7 @@ export default function FullscreenCanvas({
     <View style={styles.fullscreenContainer}>
       <SafeAreaView style={styles.safeArea}>
         {/* Full Screen Canvas */}
-        <View style={styles.canvasSection}>
+  <View style={[styles.canvasSection, uiVisible && styles.canvasSectionPadded]}>
           <View
             style={[
               styles.canvasContainer,
@@ -191,6 +291,11 @@ export default function FullscreenCanvas({
           >
             {(Platform.OS as any) === 'web' ? (
               templateUri ? (
+                !templateSize ? (
+                  <View style={styles.emptyCanvas}>
+                    <Text style={styles.emptyCanvasText}>Loading image…</Text>
+                  </View>
+                ) : (
                 <View
                   ref={captureViewRef}
                   collapsable={false}
@@ -210,6 +315,7 @@ export default function FullscreenCanvas({
                     height={computeFit(canvasSize, templateSize).height}
                   />
                 </View>
+                )
               ) : (
                 <View style={styles.emptyCanvas}>
                   <Text style={styles.emptyCanvasText}>Select a template to start coloring! 🎨</Text>
@@ -217,6 +323,11 @@ export default function FullscreenCanvas({
               )
             ) : (
               templateUri ? (
+                !templateSize ? (
+                  <View style={styles.emptyCanvas}>
+                    <Text style={styles.emptyCanvasText}>Loading image…</Text>
+                  </View>
+                ) : (
                 <View
                   ref={captureViewRef}
                   collapsable={false}
@@ -248,6 +359,7 @@ export default function FullscreenCanvas({
                     />
                   )}
                 </View>
+                )
               ) : (
                 <View style={styles.emptyCanvas}>
                   <Text style={styles.emptyCanvasText}>Select a template to start coloring! 🎨</Text>
@@ -257,8 +369,14 @@ export default function FullscreenCanvas({
           </View>
         </View>
 
-        {/* Floating Action Buttons - Top */}
-        <View style={styles.topActionsContainer}>
+        {/* Top toolbar (compact) */}
+        <View
+          style={[
+            styles.topActionsContainer,
+            { opacity: uiVisible ? 1 : 0 },
+          ]}
+          pointerEvents={uiVisible ? 'auto' : 'none'}
+        >
           <View style={styles.actionRow}>
             {/* First Row - Undo, Redo, Zoom */}
             <TouchableOpacity style={styles.actionButton} onPress={() => canvasRef.current?.undo?.()}>
@@ -297,25 +415,17 @@ export default function FullscreenCanvas({
               <Text style={styles.actionButtonText}>{roundedCorners ? 'Rounded' : 'Square'}</Text>
             </TouchableOpacity>
           </View>
+        </View>
 
-            {/* Zoom slider */}
-            <View style={styles.sliderRow}>
-              <Text style={styles.sliderLabel}>Zoom</Text>
-              <Slider
-                style={styles.zoomSlider}
-                minimumValue={MIN_ZOOM}
-                maximumValue={MAX_ZOOM}
-                value={zoom}
-                step={0.01}
-                onValueChange={(v: number) => setZoom(clampZoom(v))}
-                minimumTrackTintColor="#6366f1"
-                maximumTrackTintColor="#CBD5E1"
-                thumbTintColor="#6366f1"
-              />
-            </View>
-          
+        {/* Bottom dock - tools */}
+        <View
+          style={[
+            styles.bottomDock,
+            { opacity: uiVisible ? 1 : 0 },
+          ]}
+          pointerEvents={uiVisible ? 'auto' : 'none'}
+        >
           <View style={styles.actionRow}>
-            {/* Second Row - Tools */}
             <TouchableOpacity 
               style={[styles.actionButton, currentTool === 'brush' && styles.activeActionButton]} 
               onPress={() => setCurrentTool('brush')}
@@ -339,8 +449,7 @@ export default function FullscreenCanvas({
               <MaterialIcons name="auto-fix-off" size={18} color="#ffffff" />
               <Text style={styles.actionButtonText}>Eraser</Text>
             </TouchableOpacity>
-            
-            {/* Brush Size Control */}
+
             <View style={styles.sizeControl}>
               <Text style={styles.sizeLabel}>Size:</Text>
               <View style={styles.sizeIndicator}>
@@ -352,7 +461,6 @@ export default function FullscreenCanvas({
               <Text style={styles.sizeText}>{currentBrushSize}px</Text>
             </View>
 
-            {/* Color Picker Button */}
             <TouchableOpacity style={styles.colorPickerButton} onPress={() => setShowColorPicker(true)}>
               <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
               <Text style={styles.actionButtonText}>Color</Text>
@@ -360,8 +468,36 @@ export default function FullscreenCanvas({
           </View>
         </View>
 
+        {/* Zoom slider - bottom center */}
+        <View
+          style={[
+            styles.sliderOverlay,
+            { opacity: uiVisible ? 1 : 0 },
+          ]}
+          pointerEvents={uiVisible ? 'auto' : 'none'}
+        >
+          <Text style={styles.sliderLabel}>Zoom</Text>
+          <Slider
+            style={styles.zoomSlider}
+            minimumValue={MIN_ZOOM}
+            maximumValue={MAX_ZOOM}
+            value={zoom}
+            step={0.01}
+            onValueChange={(v: number) => setZoom(clampZoom(v))}
+            minimumTrackTintColor="#6366f1"
+            maximumTrackTintColor="#CBD5E1"
+            thumbTintColor="#6366f1"
+          />
+        </View>
+
         {/* Bottom Actions */}
-        <View style={styles.bottomActionsContainer}>
+        <View
+          style={[
+            styles.bottomActionsContainer,
+            { opacity: uiVisible ? 1 : 0 },
+          ]}
+          pointerEvents={uiVisible ? 'auto' : 'none'}
+        >
           <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
             <Feather name="save" size={18} color="#ffffff" />
             <Text style={styles.actionButtonText}>Save</Text>
@@ -377,6 +513,16 @@ export default function FullscreenCanvas({
             <Text style={styles.actionButtonText}>Exit</Text>
           </TouchableOpacity>
         </View>
+
+        {/* UI toggle chip (always accessible) */}
+        <TouchableOpacity
+          style={styles.uiToggle}
+          onPress={() => setUiVisible(!uiVisible)}
+          activeOpacity={0.9}
+        >
+          <Feather name={uiVisible ? 'eye-off' : 'eye'} size={14} color="#111827" />
+          <Text style={styles.uiToggleText}>{uiVisible ? 'Hide' : 'Controls'}</Text>
+        </TouchableOpacity>
       </SafeAreaView>
 
       {/* Color Picker Modal */}
@@ -432,6 +578,11 @@ const styles = StyleSheet.create({
   paddingHorizontal: 10,
   paddingVertical: 10,
   },
+  canvasSectionPadded: {
+    // Reserve space so overlays do not cover the drawable area
+    paddingTop: 72,
+    paddingBottom: 140,
+  },
   canvasContainer: {
   backgroundColor: '#ffffff',
   borderRadius: 0,
@@ -460,7 +611,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   
-  // Floating Action Buttons - Top
+  // Top toolbar
   topActionsContainer: {
   position: 'absolute',
   top: 24,
@@ -509,9 +660,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  // Zoom slider row
-  sliderRow: {
-    marginTop: 8,
+  // Zoom slider overlay (bottom center)
+  sliderOverlay: {
+    position: 'absolute',
+    bottom: 120,
+    left: 16,
+    right: 16,
+    alignSelf: 'center',
     backgroundColor: 'rgba(255,255,255,0.9)',
     borderRadius: 16,
     paddingHorizontal: 12,
@@ -586,6 +741,16 @@ const styles = StyleSheet.create({
     borderColor: '#ffffff',
   },
   
+  // Bottom dock - tools row
+  bottomDock: {
+    position: 'absolute',
+    bottom: 64,
+    left: 16,
+    right: 16,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+
   // Bottom Actions
   bottomActionsContainer: {
   position: 'absolute',
@@ -681,5 +846,25 @@ const styles = StyleSheet.create({
   selectedColorOption: {
     borderColor: '#1f2937',
     transform: [{ scale: 1.1 }],
+  },
+
+  // UI toggle chip
+  uiToggle: {
+    position: 'absolute',
+    top: 20,
+    right: 16,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    zIndex: 20,
+  },
+  uiToggleText: {
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
