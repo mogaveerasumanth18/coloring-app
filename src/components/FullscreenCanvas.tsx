@@ -324,6 +324,16 @@ export default function FullscreenCanvas({
     >
     <View style={styles.fullscreenContainer}>
       <SafeAreaView style={styles.safeArea}>
+        {/* Always-on UI peek button to reveal/hide controls */}
+        <View style={styles.uiPeekContainer} pointerEvents={"auto"}>
+          <TouchableOpacity
+            onPress={() => setUiVisible((v) => !v)}
+            activeOpacity={0.85}
+            style={[styles.uiPeekButton, uiVisible && styles.uiPeekButtonActive]}
+          >
+            <Feather name={uiVisible ? 'eye' : 'eye-off'} size={16} color="#111827" />
+          </TouchableOpacity>
+        </View>
         {/* Canvas area */}
         <View
           style={[
@@ -633,6 +643,26 @@ const styles = StyleSheet.create({
   fullscreenContainer: {
   flex: 1,
     backgroundColor: '#000000',
+  },
+  uiPeekContainer: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    zIndex: 30,
+  },
+  uiPeekButton: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  uiPeekButtonActive: {
+    backgroundColor: 'rgba(255,255,255,1)',
   },
   safeArea: {
     flex: 1,

@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as FileSystem from 'expo-file-system';
@@ -128,6 +129,9 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
   // Live preview of brush/eraser as a smooth overlay path
   const [strokePoints, setStrokePoints] = useState<Point[]>([]);
+  // Overlay fade to avoid flash when swapping preview -> committed bitmap
+  const overlayOpacity = useRef(new Animated.Value(1)).current;
+  const waitingForImageLoadRef = useRef<boolean>(false);
 
   const cloneBitmap = useCallback((bmp: ColoringBitmap): ColoringBitmap => {
     return {
@@ -578,6 +582,19 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
             height: bitmap.height,
             data: newData,
           };
+          // Reapply outlines to prevent fill from softening or covering template lines
+          if (originalTemplate && strongBoundaryMaskRef.current) {
+            const mask = strongBoundaryMaskRef.current;
+            for (let i = 0; i < mask.length; i++) {
+              if (mask[i] === 1) {
+                const pi = i * 4;
+                newBitmap.data[pi] = originalTemplate.data[pi];
+                newBitmap.data[pi + 1] = originalTemplate.data[pi + 1];
+                newBitmap.data[pi + 2] = originalTemplate.data[pi + 2];
+                newBitmap.data[pi + 3] = originalTemplate.data[pi + 3];
+              }
+            }
+          }
           setBitmap(newBitmap);
           await updateDataUrl(newBitmap);
           saveToHistory(newBitmap);
@@ -618,7 +635,12 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
               const x = cx + dx;
               const y = cy + dy;
               if (x >= 0 && x < bitmap.width && y >= 0 && y < bitmap.height) {
-                const index = (y * bitmap.width + x) * 4;
+                const mIndex = y * bitmap.width + x;
+                const index = mIndex * 4;
+                // Do not paint over strong boundary (template outlines)
+                if (selectedTool !== 'eraser' && strongBoundaryMaskRef.current && strongBoundaryMaskRef.current[mIndex] === 1) {
+                  continue;
+                }
                 if (selectedTool === 'eraser') {
                   if (originalTemplate) {
                     newData[index] = originalTemplate.data[index];
@@ -718,6 +740,19 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         // Commit working buffer to bitmap once
         if (workingDataRef.current) {
           const committed: ColoringBitmap = { width: bitmap.width, height: bitmap.height, data: workingDataRef.current };
+          // Reapply strong boundary (outlines) from original template to ensure lines stay crisp
+          if (originalTemplate && strongBoundaryMaskRef.current) {
+            const mask = strongBoundaryMaskRef.current;
+            for (let i = 0; i < mask.length; i++) {
+              if (mask[i] === 1) {
+                const pi = i * 4;
+                committed.data[pi] = originalTemplate.data[pi];
+                committed.data[pi + 1] = originalTemplate.data[pi + 1];
+                committed.data[pi + 2] = originalTemplate.data[pi + 2];
+                committed.data[pi + 3] = originalTemplate.data[pi + 3];
+              }
+            }
+          }
           setBitmap(committed);
           await updateDataUrl(committed);
           saveToHistory(committed);
@@ -727,8 +762,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         }
   workingDataRef.current = null;
         lastPointRef.current = null;
-  // Clear live preview
-  setStrokePoints([]);
+  // Keep preview visible until the new image has loaded; then fade it out
+  waitingForImageLoadRef.current = true;
         // final encode was handled above
       }
     },
@@ -762,6 +797,20 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
               borderRadius: 12,
             }}
             resizeMode="contain"
+            transition={100}
+            onLoadEnd={() => {
+              if (waitingForImageLoadRef.current) {
+                Animated.timing(overlayOpacity, {
+                  toValue: 0,
+                  duration: 120,
+                  useNativeDriver: true,
+                }).start(() => {
+                  setStrokePoints([]);
+                  overlayOpacity.setValue(1); // reset for next stroke
+                  waitingForImageLoadRef.current = false;
+                });
+              }
+            }}
           />
         ) : (
           <View style={[styles.placeholder, { width: canvasSize.width, height: canvasSize.height }]}>
@@ -770,22 +819,27 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         )}
         {/* Live stroke preview overlay (cheap, smooth) */}
         {strokePoints.length > 0 && (
-          <Svg
+          <Animated.View
             pointerEvents="none"
-            width={canvasSize.width}
-            height={canvasSize.height}
-            style={StyleSheet.absoluteFill}
+            style={[StyleSheet.absoluteFill, { opacity: overlayOpacity }]}
           >
-            <Path
-              d={`M ${strokePoints[0].x} ${strokePoints[0].y} ` + strokePoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')}
-              stroke={selectedTool === 'eraser' ? '#000' : selectedColor}
-              opacity={selectedTool === 'eraser' ? 0.35 : 0.9}
-              strokeWidth={brushWidth}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          </Svg>
+            <Svg
+              pointerEvents="none"
+              width={canvasSize.width}
+              height={canvasSize.height}
+              style={StyleSheet.absoluteFill}
+            >
+              <Path
+                d={`M ${strokePoints[0].x} ${strokePoints[0].y} ` + strokePoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')}
+                stroke={selectedTool === 'eraser' ? '#000' : selectedColor}
+                opacity={selectedTool === 'eraser' ? 0.35 : 0.9}
+                strokeWidth={brushWidth}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            </Svg>
+          </Animated.View>
         )}
       </View>
     </View>
