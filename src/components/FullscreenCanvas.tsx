@@ -12,9 +12,11 @@ import {
   ScrollView,
   Modal,
   Image,
+  Animated,
+  Easing,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { captureRef } from 'react-native-view-shot';
 import * as MediaLibrary from 'expo-media-library';
@@ -130,6 +132,7 @@ export default function FullscreenCanvas({
   onColoringChange,
   onColoringComplete,
 }: FullscreenCanvasProps) {
+  const insets = useSafeAreaInsets();
   const [zoom, setZoom] = useState(1);
   const MIN_ZOOM = 0.5;
   const MAX_ZOOM = 3;
@@ -149,8 +152,20 @@ export default function FullscreenCanvas({
   const [uiVisible, setUiVisible] = useState(true);
   // UI density modes to control how much chrome is shown
   const [uiMode, setUiMode] = useState<'full' | 'compact' | 'minimal'>('compact');
-  const [showZoom, setShowZoom] = useState(false); // compact: open a temporary zoom slider
+  // Removed the temporary zoom slider overlay to reduce clutter
   const [toolsVisible, setToolsVisible] = useState(false); // bottom tools panel collapsed by default
+  // Radial FAB menu state
+  const [fabOpen, setFabOpen] = useState(false);
+  const fabAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fabAnim, {
+      toValue: fabOpen ? 1 : 0,
+      duration: 160,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [fabOpen, fabAnim]);
 
   // Auto-hide UI shortly after entering fullscreen; can be revealed with the toggle
   useEffect(() => {
@@ -162,7 +177,6 @@ export default function FullscreenCanvas({
   const revealUi = () => setUiVisible(true);
   const cycleUiMode = () => {
     setUiVisible(true);
-    setShowZoom(false);
     setUiMode((m) => (m === 'full' ? 'compact' : m === 'compact' ? 'minimal' : 'full'));
   };
 
@@ -207,12 +221,14 @@ export default function FullscreenCanvas({
       await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
       StatusBar.setHidden(false);
     }
+  setFabOpen(false);
     onClose();
   };
 
   const handleSave = async () => {
     if (Platform.OS === 'web') {
-      canvasRef.current?.save?.();
+  canvasRef.current?.save?.();
+  setFabOpen(false);
       return;
     }
 
@@ -237,10 +253,16 @@ export default function FullscreenCanvas({
       } else {
         await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
       }
-      Alert.alert('Saved to Gallery', 'Your masterpiece was saved to the Photos app!');
+  Alert.alert('Saved to Gallery', 'Your masterpiece was saved to the Photos app!');
+  setFabOpen(false);
     } catch (e: any) {
       Alert.alert('Save failed', e?.message ?? 'Unknown error');
     }
+  };
+
+  const handleClear = () => {
+    // Native canvas exposes clear(); web may no-op if ref is not present
+    canvasRef.current?.clear?.();
   };
 
   // Use a full-screen Modal so the overlay truly covers the entire screen
@@ -396,11 +418,7 @@ export default function FullscreenCanvas({
                 <Feather name="refresh-ccw" size={18} color="#ffffff" />
                 {uiMode === 'full' && <Text style={styles.actionButtonText}>Reset</Text>}
               </TouchableOpacity>
-              {uiMode === 'compact' && (
-                <TouchableOpacity style={styles.smallActionButton} onPress={() => setShowZoom((v) => !v)}>
-                  <Feather name="sliders" size={18} color="#ffffff" />
-                </TouchableOpacity>
-              )}
+              {/* compact zoom slider toggle removed */}
               <TouchableOpacity
                 style={[uiMode === 'compact' ? styles.smallActionButton : styles.actionButton, roundedCorners && styles.activeActionButton]}
                 onPress={() => setRoundedCorners((v) => !v)}
@@ -471,7 +489,85 @@ export default function FullscreenCanvas({
               </View>
             )}
           </View>
-  )}
+        )}
+
+        {/* Radial floating actions (Save, Clear, Exit) */}
+        <View
+          style={[
+            styles.fabContainer,
+            {
+              opacity: uiVisible ? 1 : 0,
+              bottom: Math.max(16, 16 + (insets?.bottom ?? 0)),
+              right: Math.max(16, 16 + (insets?.right ?? 0)),
+            },
+          ]}
+          pointerEvents={uiVisible || fabOpen ? 'auto' : 'none'}
+        >
+          {/* Animated radial items */}
+          <Animated.View pointerEvents={fabOpen ? 'auto' : 'none'}>
+            <Animated.View
+              style={[
+                styles.fabItem,
+                styles.fabSave,
+                {
+                  opacity: fabAnim,
+                  transform: [
+                    { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -88] }) },
+                    { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
+                  ],
+                },
+              ]}
+            >
+              <TouchableOpacity onPress={handleSave} activeOpacity={0.85}>
+                <Feather name="save" size={18} color="#ffffff" />
+              </TouchableOpacity>
+            </Animated.View>
+
+            <Animated.View
+              style={[
+                styles.fabItem,
+                styles.fabClear,
+                {
+                  opacity: fabAnim,
+                  transform: [
+                    { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -62] }) },
+                    { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -62] }) },
+                    { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
+                  ],
+                },
+              ]}
+            >
+              <TouchableOpacity onPress={handleClear} activeOpacity={0.85}>
+                <Feather name="trash-2" size={18} color="#ffffff" />
+              </TouchableOpacity>
+            </Animated.View>
+
+            <Animated.View
+              style={[
+                styles.fabItem,
+                styles.fabExit,
+                {
+                  opacity: fabAnim,
+                  transform: [
+                    { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -88] }) },
+                    { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
+                  ],
+                },
+              ]}
+            >
+              <TouchableOpacity onPress={handleClose} activeOpacity={0.85}>
+                <Feather name="x" size={18} color="#ffffff" />
+              </TouchableOpacity>
+            </Animated.View>
+          </Animated.View>
+          <TouchableOpacity
+            onPress={() => setFabOpen((v) => !v)}
+            activeOpacity={0.9}
+            style={[styles.fabMain, fabOpen && styles.fabMainOpen]}
+          >
+            <Feather name={fabOpen ? 'x' : 'grid'} size={20} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
 
         {/* UI mode toggle chip */}
         <TouchableOpacity style={styles.uiToggle} onPress={cycleUiMode} activeOpacity={0.9}>
@@ -524,18 +620,18 @@ const styles = StyleSheet.create({
   flex: 1,
   justifyContent: 'center',
   alignItems: 'center',
-  paddingHorizontal: 10,
-  paddingVertical: 10,
+  paddingHorizontal: 0,
+  paddingVertical: 0,
   },
   canvasSectionPaddedFull: {
     // Reserve space so overlays do not cover the drawable area (full UI)
-    paddingTop: 72,
-    paddingBottom: 140,
+    paddingTop: 56,
+    paddingBottom: 100,
   },
   canvasSectionPaddedCompact: {
     // Smaller paddings in compact UI
-    paddingTop: 48,
-    paddingBottom: 96,
+    paddingTop: 36,
+    paddingBottom: 80,
   },
   canvasContainer: {
   backgroundColor: '#ffffff',
@@ -570,7 +666,7 @@ const styles = StyleSheet.create({
   position: 'absolute',
   top: 24,
   left: 16,
-  right: 16,
+  right: 28, // extra space to avoid Android nav buttons
     zIndex: 10,
     gap: 12,
   },
@@ -628,30 +724,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  // Zoom slider overlay (bottom center)
-  sliderOverlay: {
-    position: 'absolute',
-    bottom: 120,
-    left: 16,
-    right: 16,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sliderLabel: {
-    color: '#1f2937',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  zoomSlider: {
-    flex: 1,
-    height: 32,
-  },
+  // Zoom slider overlay removed
   
   // Size Control
   sizeControl: {
@@ -713,8 +786,8 @@ const styles = StyleSheet.create({
   toolsHandleContainer: {
     position: 'absolute',
     bottom: 24,
-    left: 0,
-    right: 0,
+  left: 0,
+  right: 12,
     alignItems: 'center',
     zIndex: 12,
   },
@@ -932,5 +1005,54 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontSize: 12,
     fontWeight: '700',
+  },
+
+  // Radial FAB menu
+  fabContainer: {
+    position: 'absolute',
+    bottom: 24,
+    right: 28, // offset from right to avoid nav bar
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    zIndex: 20,
+  },
+  fabMain: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#111827',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 12,
+  },
+  fabMainOpen: {
+    backgroundColor: '#4f46e5',
+  },
+  fabItem: {
+    position: 'absolute',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 10,
+    backgroundColor: '#6b7280',
+  },
+  fabSave: {
+    backgroundColor: '#10b981',
+  },
+  fabClear: {
+    backgroundColor: '#ef4444',
+  },
+  fabExit: {
+    backgroundColor: '#6b7280',
   },
 });
