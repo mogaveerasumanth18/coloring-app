@@ -11,6 +11,7 @@ import { Image } from 'expo-image';
 import * as FileSystem from 'expo-file-system';
 import { encode as btoa, decode as atob } from 'base-64';
 import * as UPNG from 'upng-js';
+import Svg, { Path } from 'react-native-svg';
 
 // We previously used ZebraFloodFill, but Android was leaking through anti-aliased lines.
 // We'll compute a boundary mask once and run a mask-aware flood fill locally.
@@ -111,6 +112,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   // Throttle expensive PNG encodes during brush moves
   const lastEncodeTimeRef = useRef<number>(0);
   const encodeInFlightRef = useRef<boolean>(false);
+  const encodeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Precomputed boundary mask (1 = boundary/outline, 0 = fillable)
   const boundaryMaskRef = useRef<Uint8Array | null>(null);
   // Strong boundary mask (stricter, no dilation) to protect true dark lines in edge coat
@@ -123,6 +125,9 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   useEffect(() => {
     onCompleteRef.current = onColoringComplete;
   }, [onColoringComplete]);
+
+  // Live preview of brush/eraser as a smooth overlay path
+  const [strokePoints, setStrokePoints] = useState<Point[]>([]);
 
   const cloneBitmap = useCallback((bmp: ColoringBitmap): ColoringBitmap => {
     return {
@@ -516,8 +521,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
             return luma > 115; // allow painting on light rim
           };
 
-          // Two dilation iterations
-          for (let pass = 0; pass < 2; pass++) {
+          // Single dilation iteration for speed
+          for (let pass = 0; pass < 1; pass++) {
             const toPaint: number[] = [];
             for (let y = 0; y < heightH; y++) {
               for (let x = 0; x < widthW; x++) {
@@ -635,15 +640,14 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   const newBitmap: ColoringBitmap = { width: bitmap.width, height: bitmap.height, data: newData };
   // Do not setBitmap on every move; we only update the preview (dataUrl) below
       // Light live update while drawing: throttle PNG encodes to avoid jank
-      const now = Date.now();
-      if (!encodeInFlightRef.current && now - lastEncodeTimeRef.current > 200) {
-        lastEncodeTimeRef.current = now;
+      if (encodeDebounceRef.current) clearTimeout(encodeDebounceRef.current);
+      encodeDebounceRef.current = setTimeout(() => {
+        if (encodeInFlightRef.current) return;
         encodeInFlightRef.current = true;
-        // Fire and forget; errors are caught inside updateDataUrl
         updateDataUrl(newBitmap).finally(() => {
           encodeInFlightRef.current = false;
         });
-      }
+      }, 140);
   // Keep final high-quality encode to stroke end
     } catch (error) {
       console.error('❌ Error during brush stroke:', error);
@@ -671,6 +675,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
           x: Math.floor(locationX * scaleX),
           y: Math.floor(locationY * scaleY),
         };
+        // Seed live preview path
+        setStrokePoints([{ x: locationX, y: locationY }]);
         performBrushStroke(locationX, locationY);
       }
     },
@@ -678,6 +684,13 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     onPanResponderMove: (evt) => {
       if (selectedTool === 'brush' || selectedTool === 'eraser') {
         const { locationX, locationY } = evt.nativeEvent;
+        // Extend live preview
+        setStrokePoints((pts) => {
+          if (pts.length === 0) return [{ x: locationX, y: locationY }];
+          const last = pts[pts.length - 1];
+          if (Math.abs(last.x - locationX) + Math.abs(last.y - locationY) < 0.3) return pts;
+          return [...pts, { x: locationX, y: locationY }];
+        });
         performBrushStroke(locationX, locationY);
       }
     },
@@ -694,8 +707,10 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
           saveToHistory(bitmap);
           await updateDataUrl(bitmap);
         }
-        workingDataRef.current = null;
+  workingDataRef.current = null;
         lastPointRef.current = null;
+  // Clear live preview
+  setStrokePoints([]);
         // final encode was handled above
       }
     },
@@ -734,6 +749,25 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
           <View style={[styles.placeholder, { width: canvasSize.width, height: canvasSize.height }]}>
             <Text style={styles.placeholderText}>Loading template...</Text>
           </View>
+        )}
+        {/* Live stroke preview overlay (cheap, smooth) */}
+        {strokePoints.length > 0 && (
+          <Svg
+            pointerEvents="none"
+            width={canvasSize.width}
+            height={canvasSize.height}
+            style={StyleSheet.absoluteFill}
+          >
+            <Path
+              d={`M ${strokePoints[0].x} ${strokePoints[0].y} ` + strokePoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')}
+              stroke={selectedTool === 'eraser' ? '#000' : selectedColor}
+              opacity={selectedTool === 'eraser' ? 0.35 : 0.9}
+              strokeWidth={brushWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+          </Svg>
         )}
       </View>
     </View>
