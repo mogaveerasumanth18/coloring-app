@@ -506,9 +506,10 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         }
 
         if (filled > 0) {
-          // Edge coat fix: dilate the filled region by 2 passes (radius≈2) but never onto strong boundaries
-          // and avoid obviously dark pixels (likely outline AA) using a brightness check.
+          // Adaptive, boundary-aware gap sealing: lightly grow the region only along outlines
+          // to close anti-aliased gaps without leaking past dark lines.
           const strong = strongBoundaryMaskRef.current!; // strict boundary mask
+          const loose = boundaryMaskRef.current; // looser (dilated) boundary mask
           const widthW = bitmap.width;
           const heightH = bitmap.height;
           const isBright = (idxPix: number) => {
@@ -518,34 +519,46 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
             const b = newData[ri + 2];
             // Luma threshold tuned to keep away from dark outline greys
             const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-            return luma > 115; // allow painting on light rim
+            return luma > 110; // allow painting on light rim
           };
 
-          // Single dilation iteration for speed
-          for (let pass = 0; pass < 1; pass++) {
+          // Heuristic: for small fills, allow up to 2 sealing passes; large fills only 1
+          const totalPx = widthW * heightH;
+          const areaRatio = filled / totalPx;
+          const maxPasses = areaRatio < 0.05 ? 2 : 1;
+
+          for (let pass = 0; pass < maxPasses; pass++) {
+            let added = 0;
             const toPaint: number[] = [];
             for (let y = 0; y < heightH; y++) {
               for (let x = 0; x < widthW; x++) {
                 const idx1 = y * widthW + x;
                 if (filledMask[idx1] === 1) continue; // already painted
                 if (strong[idx1] === 1) continue; // never cross strong boundaries
-                // check 8-neighbors for filled
+
+                // Must be adjacent to the filled region (8-neighborhood)
                 let neighborFilled = false;
-                for (let dy = -1; dy <= 1 && !neighborFilled; dy++) {
-                  for (let dx = -1; dx <= 1 && !neighborFilled; dx++) {
+                // And preferably hugging a boundary pixel to target AA gaps
+                let neighborBoundary = false;
+                for (let dy = -1; dy <= 1; dy++) {
+                  for (let dx = -1; dx <= 1; dx++) {
                     if (dx === 0 && dy === 0) continue;
                     const nx = x + dx;
                     const ny = y + dy;
                     if (nx < 0 || ny < 0 || nx >= widthW || ny >= heightH) continue;
                     const nIdx = ny * widthW + nx;
-                    if (filledMask[nIdx] === 1) neighborFilled = true;
+                    if (!neighborFilled && filledMask[nIdx] === 1) neighborFilled = true;
+                    if (!neighborBoundary && loose && loose[nIdx] === 1) neighborBoundary = true;
+                    if (neighborFilled && neighborBoundary) break;
                   }
+                  if (neighborFilled && neighborBoundary) break;
                 }
-                if (!neighborFilled) continue;
+                if (!neighborFilled || !neighborBoundary) continue;
                 if (!isBright(idx1)) continue; // skip darker pixels near outline
                 toPaint.push(idx1);
               }
             }
+
             for (const nIdx of toPaint) {
               const pi2 = nIdx * 4;
               newData[pi2] = fillR;
@@ -553,7 +566,11 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
               newData[pi2 + 2] = fillB;
               newData[pi2 + 3] = fillA;
               filledMask[nIdx] = 1;
+              added++;
             }
+
+            // Early exit if pass added very little
+            if (added === 0) break;
           }
 
           const newBitmap: ColoringBitmap = {
@@ -588,8 +605,9 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       if (!workingDataRef.current || workingDataRef.current.length !== bitmap.data.length) {
         workingDataRef.current = new Uint8Array(bitmap.data);
       }
-      const newData = workingDataRef.current;
-      const brushRadius = Math.max(1, Math.floor(brushWidth * Math.min(scaleX, scaleY)));
+  const newData = workingDataRef.current;
+  // Interpret brushWidth as visual stroke width; convert to bitmap radius
+  const brushRadius = Math.max(1, Math.floor((brushWidth / 2) * Math.min(scaleX, scaleY)));
 
       // Helper to stamp a circular brush at integer coords
       const stampAt = (cx: number, cy: number) => {
