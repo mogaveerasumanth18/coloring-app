@@ -59,6 +59,33 @@ function fitIntoBox(iw: number, ih: number, bw: number, bh: number) {
   return { width, height };
 }
 
+// Fast nearest-neighbor resampler for RGBA Uint8 data
+function resampleNearest(
+  src: Uint8Array,
+  sw: number,
+  sh: number,
+  dw: number,
+  dh: number
+): Uint8Array {
+  if (sw === dw && sh === dh) return new Uint8Array(src);
+  const dst = new Uint8Array(dw * dh * 4);
+  const xRatio = sw / dw;
+  const yRatio = sh / dh;
+  for (let y = 0; y < dh; y++) {
+    const sy = Math.min(sh - 1, Math.floor(y * yRatio));
+    for (let x = 0; x < dw; x++) {
+      const sx = Math.min(sw - 1, Math.floor(x * xRatio));
+      const si = (sy * sw + sx) * 4;
+      const di = (y * dw + x) * 4;
+      dst[di] = src[si];
+      dst[di + 1] = src[si + 1];
+      dst[di + 2] = src[si + 2];
+      dst[di + 3] = src[si + 3];
+    }
+  }
+  return dst;
+}
+
 export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>(({
   templateUri,
   selectedColor = '#FF6B6B',
@@ -79,12 +106,18 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   const [historyIndex, setHistoryIndex] = useState(-1);
   // Track last touch point to draw continuous brush lines
   const lastPointRef = useRef<Point | null>(null);
+  // Working pixel buffer during an active brush/eraser stroke
+  const workingDataRef = useRef<Uint8Array | null>(null);
   // Throttle expensive PNG encodes during brush moves
   const lastEncodeTimeRef = useRef<number>(0);
+  const encodeInFlightRef = useRef<boolean>(false);
   // Precomputed boundary mask (1 = boundary/outline, 0 = fillable)
   const boundaryMaskRef = useRef<Uint8Array | null>(null);
   // Strong boundary mask (stricter, no dilation) to protect true dark lines in edge coat
   const strongBoundaryMaskRef = useRef<Uint8Array | null>(null);
+  // Reusable work buffers to avoid GC thrash
+  const visitedRef = useRef<Uint8Array | null>(null);
+  const filledMaskRef = useRef<Uint8Array | null>(null);
   // Keep a stable ref for onColoringComplete to avoid effect churn
   const onCompleteRef = useRef<NativeZebraCanvasProps['onColoringComplete']>(onColoringComplete);
   useEffect(() => {
@@ -115,7 +148,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     return [r, g, b, 255];
   }, []);
 
-  const updateDataUrl = useCallback(async (currentBitmap: ColoringBitmap) => {
+  const updateDataUrl = useCallback(async (currentBitmap: ColoringBitmap): Promise<void> => {
     try {
       // Convert RGBA pixel buffer to a PNG using upng-js on both web and native
       const pngArrayBuffer = (UPNG as any).encode(
@@ -135,7 +168,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       }
       const base64Png = btoa(binary);
       const uri = `data:image/png;base64,${base64Png}`;
-      setDataUrl(uri);
+  setDataUrl((prev) => (prev === uri ? prev : uri));
 
   if (onCompleteRef.current) onCompleteRef.current(uri);
     } catch (error) {
@@ -224,23 +257,24 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         imgHeight = decoded.height;
       }
 
-      // Keep original bitmap to avoid distortion; only the view size fits inside requested box
+      // Fit into view box and downscale pixel data to displayed size to reduce per-pixel work
       const viewBoxW = width || DEFAULT_CANVAS_SIZE;
       const viewBoxH = height || DEFAULT_CANVAS_SIZE;
       const fitted = fitIntoBox(imgWidth, imgHeight, viewBoxW, viewBoxH);
 
-      const newBitmap: ColoringBitmap = {
-        width: imgWidth,
-        height: imgHeight,
-        data: imageData,
-      };
+      const newBitmap: ColoringBitmap =
+        (imgWidth !== fitted.width || imgHeight !== fitted.height)
+          ? { width: fitted.width, height: fitted.height, data: resampleNearest(imageData, imgWidth, imgHeight, fitted.width, fitted.height) }
+          : { width: imgWidth, height: imgHeight, data: imageData };
 
       setBitmap(newBitmap);
       setOriginalTemplate(cloneBitmap(newBitmap)); // Store original template for eraser
   setCanvasSize({ width: fitted.width, height: fitted.height });
-  // Build robust masks from the loaded template
+  // Build robust masks from the loaded template and allocate reusable work buffers
   boundaryMaskRef.current = computeBoundaryMask(newBitmap);
   strongBoundaryMaskRef.current = computeStrongBoundaryMask(newBitmap);
+  visitedRef.current = new Uint8Array(newBitmap.width * newBitmap.height);
+  filledMaskRef.current = new Uint8Array(newBitmap.width * newBitmap.height);
       await updateDataUrl(newBitmap);
       
       // Save initial state to history
@@ -309,6 +343,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   // Build boundary masks for fallback as well
   boundaryMaskRef.current = computeBoundaryMask(fallbackBitmap);
   strongBoundaryMaskRef.current = computeStrongBoundaryMask(fallbackBitmap);
+  visitedRef.current = new Uint8Array(fallbackBitmap.width * fallbackBitmap.height);
+  filledMaskRef.current = new Uint8Array(fallbackBitmap.width * fallbackBitmap.height);
     await updateDataUrl(fallbackBitmap);
     
     // Save initial state to history
@@ -399,9 +435,26 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         }
 
         // Local BFS flood fill that respects boundary mask and color tolerance
-  const q: Array<{ x: number; y: number }> = [{ x: sx, y: sy }];
-  const visited = new Uint8Array(bitmap.width * bitmap.height);
-  const filledMask = new Uint8Array(bitmap.width * bitmap.height);
+        // Use ring buffer queue and preallocated arrays to minimize GC/CPU
+        const total = bitmap.width * bitmap.height;
+        let visited = visitedRef.current;
+        let filledMask = filledMaskRef.current;
+        if (!visited || visited.length !== total) {
+          visited = new Uint8Array(total);
+          visitedRef.current = visited;
+        } else {
+          visited.fill(0);
+        }
+        if (!filledMask || filledMask.length !== total) {
+          filledMask = new Uint8Array(total);
+          filledMaskRef.current = filledMask;
+        } else {
+          filledMask.fill(0);
+        }
+        const qx = new Int32Array(total);
+        const qy = new Int32Array(total);
+        let qh = 0, qt = 0;
+        qx[qt] = sx; qy[qt] = sy; qt = (qt + 1) % total;
         const withinTol = (x: number, y: number) => {
           const i = (y * bitmap.width + x) * 4;
           const r = newData[i];
@@ -418,8 +471,10 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         };
 
         let filled = 0;
-        while (q.length) {
-          const { x, y } = q.shift()!;
+        while (qh !== qt) {
+          const x = qx[qh];
+          const y = qy[qh];
+          qh = (qh + 1) % total;
           if (x < 0 || y < 0 || x >= bitmap.width || y >= bitmap.height) continue;
           const mIndex = y * bitmap.width + x;
           if (visited[mIndex]) continue;
@@ -439,10 +494,10 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
           filled++;
 
           // 4-way neighbors
-          q.push({ x: x + 1, y });
-          q.push({ x: x - 1, y });
-          q.push({ x, y: y + 1 });
-          q.push({ x, y: y - 1 });
+          qx[qt] = x + 1; qy[qt] = y; qt = (qt + 1) % total;
+          qx[qt] = x - 1; qy[qt] = y; qt = (qt + 1) % total;
+          qx[qt] = x; qy[qt] = y + 1; qt = (qt + 1) % total;
+          qx[qt] = x; qy[qt] = y - 1; qt = (qt + 1) % total;
         }
 
         if (filled > 0) {
@@ -524,8 +579,11 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       const scaleY = bitmap.height / canvasSize.height;
       const bitmapX = Math.floor(touchX * scaleX);
       const bitmapY = Math.floor(touchY * scaleY);
-
-      const newData = new Uint8Array(bitmap.data);
+      // Use a single working buffer for the whole stroke
+      if (!workingDataRef.current || workingDataRef.current.length !== bitmap.data.length) {
+        workingDataRef.current = new Uint8Array(bitmap.data);
+      }
+      const newData = workingDataRef.current;
       const brushRadius = Math.max(1, Math.floor(brushWidth * Math.min(scaleX, scaleY)));
 
       // Helper to stamp a circular brush at integer coords
@@ -574,19 +632,17 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       }
       lastPointRef.current = { x: bitmapX, y: bitmapY };
 
-      const newBitmap: ColoringBitmap = {
-        width: bitmap.width,
-        height: bitmap.height,
-        data: newData,
-      };
-
-      setBitmap(newBitmap);
-      // Light live update while drawing: throttle PNG encodes to avoid flicker
+  const newBitmap: ColoringBitmap = { width: bitmap.width, height: bitmap.height, data: newData };
+  // Do not setBitmap on every move; we only update the preview (dataUrl) below
+      // Light live update while drawing: throttle PNG encodes to avoid jank
       const now = Date.now();
-      if (now - lastEncodeTimeRef.current > 120) {
+      if (!encodeInFlightRef.current && now - lastEncodeTimeRef.current > 200) {
         lastEncodeTimeRef.current = now;
+        encodeInFlightRef.current = true;
         // Fire and forget; errors are caught inside updateDataUrl
-        updateDataUrl(newBitmap);
+        updateDataUrl(newBitmap).finally(() => {
+          encodeInFlightRef.current = false;
+        });
       }
   // Keep final high-quality encode to stroke end
     } catch (error) {
@@ -607,6 +663,10 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         // Start a new stroke
         const scaleX = (bitmap?.width || 1) / canvasSize.width;
         const scaleY = (bitmap?.height || 1) / canvasSize.height;
+        // Create a working copy once per stroke
+        if (bitmap) {
+          workingDataRef.current = new Uint8Array(bitmap.data);
+        }
         lastPointRef.current = {
           x: Math.floor(locationX * scaleX),
           y: Math.floor(locationY * scaleY),
@@ -624,10 +684,19 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
     onPanResponderRelease: async () => {
       if (bitmap && (selectedTool === 'brush' || selectedTool === 'eraser')) {
-        saveToHistory(bitmap);
+        // Commit working buffer to bitmap once
+        if (workingDataRef.current) {
+          const committed: ColoringBitmap = { width: bitmap.width, height: bitmap.height, data: workingDataRef.current };
+          setBitmap(committed);
+          await updateDataUrl(committed);
+          saveToHistory(committed);
+        } else {
+          saveToHistory(bitmap);
+          await updateDataUrl(bitmap);
+        }
+        workingDataRef.current = null;
         lastPointRef.current = null;
-        // Ensure final high-quality encode when stroke ends
-        await updateDataUrl(bitmap);
+        // final encode was handled above
       }
     },
   });
