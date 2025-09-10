@@ -316,6 +316,51 @@ export default function IntegratedColoringBookApp({
   };
 
   const handleExpandFullscreen = async () => {
+    // First, try to capture current canvas state if available
+    let currentCanvasData: string | null = null;
+    
+    // Check if we have a canvas and try to get its current data
+    if (bitmapCanvasRef.current && typeof bitmapCanvasRef.current.getCurrentDataUrl === 'function') {
+      try {
+        currentCanvasData = bitmapCanvasRef.current.getCurrentDataUrl();
+        console.log('Captured current canvas state for fullscreen');
+      } catch (error) {
+        console.warn('Could not capture canvas state:', error);
+      }
+    }
+    
+    // Use current canvas data if available, otherwise fall back to stored snapshot
+    const dataToUse = currentCanvasData || canvasSnapshot;
+    
+    // If we have existing progress, check if it's different from original template
+    const hasProgress = dataToUse && dataToUse !== currentTemplate?.bitmapUri && dataToUse.length > 100; // Basic check for actual data
+    
+    if (hasProgress) {
+      Alert.alert(
+        'Switch to Fullscreen',
+        'Your current progress will be preserved when switching to fullscreen mode. Continue?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Continue',
+            onPress: () => proceedToFullscreen(dataToUse),
+          },
+        ]
+      );
+      return;
+    }
+    
+    // If no significant progress, proceed directly
+    proceedToFullscreen(dataToUse);
+  };
+
+  const proceedToFullscreen = async (canvasData: string | null) => {
+    // Update the canvas data to pass to fullscreen
+    setCanvasSnapshot(canvasData);
+    
     if (Platform.OS === 'web') {
       toggleFullscreenWeb();
     } else {
@@ -660,10 +705,14 @@ export default function IntegratedColoringBookApp({
         onClose={() => setIsFullscreen(false)}
         templateUri={currentTemplate?.bitmapUri}
         selectedColor={selectedColor}
-  selectedTool={selectedTool === 'move' ? 'brush' : selectedTool}
+        selectedTool={selectedTool === 'move' ? 'brush' : selectedTool}
         brushSize={brushSize}
         onColoringChange={() => {}}
-        onColoringComplete={() => {}}
+        onColoringComplete={(dataUrl: string) => {
+          // Update our canvas snapshot when fullscreen canvas changes
+          setCanvasSnapshot(dataUrl);
+        }}
+        initialCanvasData={canvasSnapshot || undefined}
       />
 
       {/* Color tray modal */}

@@ -129,8 +129,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
   // Live preview of brush/eraser as a smooth overlay path
   const [strokePoints, setStrokePoints] = useState<Point[]>([]);
-  // Overlay fade to avoid flash when swapping preview -> committed bitmap
-  const overlayOpacity = useRef(new Animated.Value(1)).current;
+  // Flag to wait for image load before clearing preview
   const waitingForImageLoadRef = useRef<boolean>(false);
 
   const cloneBitmap = useCallback((bmp: ColoringBitmap): ColoringBitmap => {
@@ -223,8 +222,11 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     },
     save: () => {
       console.log('Save functionality handled by parent component');
+    },
+    getCurrentDataUrl: () => {
+      return dataUrl;
     }
-  }), [historyIndex, history, bitmap, cloneBitmap, updateDataUrl, saveToHistory]);
+  }), [historyIndex, history, bitmap, cloneBitmap, updateDataUrl, saveToHistory, dataUrl]);
 
   const loadTemplate = useCallback(async () => {
     const sourceUri = initialDataUrl || templateUri;
@@ -800,15 +802,9 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
             transition={100}
             onLoadEnd={() => {
               if (waitingForImageLoadRef.current) {
-                Animated.timing(overlayOpacity, {
-                  toValue: 0,
-                  duration: 120,
-                  useNativeDriver: true,
-                }).start(() => {
-                  setStrokePoints([]);
-                  overlayOpacity.setValue(1); // reset for next stroke
-                  waitingForImageLoadRef.current = false;
-                });
+                // Instant clear - no animation to avoid flash
+                setStrokePoints([]);
+                waitingForImageLoadRef.current = false;
               }
             }}
           />
@@ -819,27 +815,22 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         )}
         {/* Live stroke preview overlay (cheap, smooth) */}
         {strokePoints.length > 0 && (
-          <Animated.View
+          <Svg
             pointerEvents="none"
-            style={[StyleSheet.absoluteFill, { opacity: overlayOpacity }]}
+            width={canvasSize.width}
+            height={canvasSize.height}
+            style={StyleSheet.absoluteFill}
           >
-            <Svg
-              pointerEvents="none"
-              width={canvasSize.width}
-              height={canvasSize.height}
-              style={StyleSheet.absoluteFill}
-            >
-              <Path
-                d={`M ${strokePoints[0].x} ${strokePoints[0].y} ` + strokePoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')}
-                stroke={selectedTool === 'eraser' ? '#000' : selectedColor}
-                opacity={selectedTool === 'eraser' ? 0.35 : 0.9}
-                strokeWidth={brushWidth}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-              />
-            </Svg>
-          </Animated.View>
+            <Path
+              d={`M ${strokePoints[0].x} ${strokePoints[0].y} ` + strokePoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')}
+              stroke={selectedTool === 'eraser' ? '#000' : selectedColor}
+              opacity={selectedTool === 'eraser' ? 0.35 : 0.9}
+              strokeWidth={brushWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+          </Svg>
         )}
       </View>
     </View>

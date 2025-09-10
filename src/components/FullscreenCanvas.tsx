@@ -34,7 +34,9 @@ interface FullscreenCanvasProps {
   selectedTool: 'brush' | 'bucket' | 'eraser';
   brushSize: number;
   onColoringChange?: () => void;
-  onColoringComplete?: () => void;
+  onColoringComplete?: (dataUrl?: string) => void;
+  // Optional: initial canvas state to restore from (e.g., from main canvas)
+  initialCanvasData?: string;
 }
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -131,6 +133,7 @@ export default function FullscreenCanvas({
   brushSize,
   onColoringChange,
   onColoringComplete,
+  initialCanvasData,
 }: FullscreenCanvasProps) {
   const insets = useSafeAreaInsets();
   const [zoom, setZoom] = useState(1);
@@ -383,6 +386,7 @@ export default function FullscreenCanvas({
                       onColoringComplete={onColoringComplete}
                       width={computeFit(canvasSize, templateSize).width}
                       height={computeFit(canvasSize, templateSize).height}
+                      initialDataUrl={initialCanvasData}
                     />
                   )}
                 </View>
