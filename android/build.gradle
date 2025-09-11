@@ -4,11 +4,17 @@ buildscript {
   repositories {
     google()
     mavenCentral()
+    // Fallback repositories for when primary repositories are unavailable
+    maven {
+      url 'https://maven.google.com/'
+      name 'Google'
+    }
   }
   dependencies {
-    classpath('com.android.tools.build:gradle')
+    // Specify explicit version for Android Gradle Plugin to avoid version conflicts
+    classpath('com.android.tools.build:gradle:8.5.0')
     classpath('com.facebook.react:react-native-gradle-plugin')
-    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
+    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24')
   }
 }
 
@@ -30,6 +36,17 @@ allprojects {
     google()
     mavenCentral()
     maven { url 'https://www.jitpack.io' }
+    
+    // Additional fallback repositories for dependency resolution
+    maven {
+      url 'https://maven.google.com/'
+      name 'Google'
+    }
+    
+    // Fallback for Android tools when primary repository is unavailable
+    maven {
+      url 'https://repo1.maven.org/maven2/'
+    }
   }
 }
 

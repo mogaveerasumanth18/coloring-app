@@ -50,10 +50,34 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./android/gradlew
 
+      - name: Clean Gradle cache
+        run: |
+          echo "Cleaning Gradle cache..."
+          ./gradlew clean --refresh-dependencies
+        working-directory: android
+
       - name: Build standalone release APK
         run: |
           echo "Building standalone release APK..."
-          ./gradlew assembleRelease --stacktrace
+          # Add retry logic for handling temporary network issues
+          max_attempts=3
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+            echo "Build attempt $attempt of $max_attempts"
+            if ./gradlew assembleRelease --stacktrace; then
+              echo "Build successful!"
+              break
+            else
+              echo "Build failed on attempt $attempt"
+              if [ $attempt -eq $max_attempts ]; then
+                echo "All build attempts failed"
+                exit 1
+              fi
+              echo "Waiting 30 seconds before retry..."
+              sleep 30
+              attempt=$((attempt + 1))
+            fi
+          done
         working-directory: android
 
       - name: Upload standalone APK artifact
