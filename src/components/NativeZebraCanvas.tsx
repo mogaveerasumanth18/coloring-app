@@ -598,7 +598,10 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
             }
           }
           setBitmap(newBitmap);
-          await updateDataUrl(newBitmap);
+          // Small delay to prevent jarring flash effect on flood fill
+          setTimeout(async () => {
+            await updateDataUrl(newBitmap);
+          }, 16); // One frame delay
           saveToHistory(newBitmap);
           console.log(`✅ Flood fill successful, pixels filled: ${filled}`);
         } else {
@@ -681,7 +684,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
   const newBitmap: ColoringBitmap = { width: bitmap.width, height: bitmap.height, data: newData };
   // Do not setBitmap on every move; we only update the preview (dataUrl) below
-      // Light live update while drawing: throttle PNG encodes to avoid jank
+      // Reduce live update frequency during drawing to prevent flash
       if (encodeDebounceRef.current) clearTimeout(encodeDebounceRef.current);
       encodeDebounceRef.current = setTimeout(() => {
         if (encodeInFlightRef.current) return;
@@ -689,7 +692,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         updateDataUrl(newBitmap).finally(() => {
           encodeInFlightRef.current = false;
         });
-      }, 140);
+      }, 200); // Increased debounce time to reduce flashing
   // Keep final high-quality encode to stroke end
     } catch (error) {
       console.error('❌ Error during brush stroke:', error);
@@ -799,12 +802,14 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
               borderRadius: 12,
             }}
             resizeMode="contain"
-            transition={100}
+            transition={0}
             onLoadEnd={() => {
               if (waitingForImageLoadRef.current) {
-                // Instant clear - no animation to avoid flash
-                setStrokePoints([]);
-                waitingForImageLoadRef.current = false;
+                // Smooth fade out of stroke preview to avoid flash
+                setTimeout(() => {
+                  setStrokePoints([]);
+                  waitingForImageLoadRef.current = false;
+                }, 50);
               }
             }}
           />
@@ -824,7 +829,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
             <Path
               d={`M ${strokePoints[0].x} ${strokePoints[0].y} ` + strokePoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')}
               stroke={selectedTool === 'eraser' ? '#000' : selectedColor}
-              opacity={selectedTool === 'eraser' ? 0.35 : 0.9}
+              opacity={selectedTool === 'eraser' ? 0.25 : 0.7}
               strokeWidth={brushWidth}
               strokeLinecap="round"
               strokeLinejoin="round"

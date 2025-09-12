@@ -327,16 +327,6 @@ export default function FullscreenCanvas({
     >
     <View style={styles.fullscreenContainer}>
       <SafeAreaView style={styles.safeArea}>
-        {/* Always-on UI peek button to reveal/hide controls */}
-        <View style={styles.uiPeekContainer} pointerEvents={"auto"}>
-          <TouchableOpacity
-            onPress={() => setUiVisible((v) => !v)}
-            activeOpacity={0.85}
-            style={[styles.uiPeekButton, uiVisible && styles.uiPeekButtonActive]}
-          >
-            <Feather name={uiVisible ? 'eye' : 'eye-off'} size={16} color="#111827" />
-          </TouchableOpacity>
-        </View>
         {/* Canvas area */}
         <View
           style={[
@@ -401,7 +391,14 @@ export default function FullscreenCanvas({
 
         {/* Top toolbar */}
         <View
-          style={[styles.topActionsContainer, { opacity: uiVisible ? 1 : 0 }]}
+          style={[
+            styles.topActionsContainer, 
+            { 
+              opacity: uiVisible ? 1 : 0,
+              top: Math.max(24, 24 + (insets?.top ?? 0)),
+              right: Math.max(16, 16 + (insets?.right ?? 0)),
+            }
+          ]}
           pointerEvents={uiVisible ? 'auto' : 'none'}
         >
           <View style={styles.actionRow}>
@@ -447,16 +444,28 @@ export default function FullscreenCanvas({
                 </TouchableOpacity>
               </>
             )}
-            {/* UI mode toggle moved here (replaces old Corners button) */}
+            {/* UI toggle and mode cycle buttons */}
+            <TouchableOpacity
+              style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
+              onPress={() => setUiVisible((v) => !v)}
+              activeOpacity={0.9}
+            >
+              <Feather name={uiVisible ? 'eye' : 'eye-off'} size={18} color="#ffffff" />
+              {uiMode === 'full' && (
+                <Text style={styles.actionButtonText}>
+                  {uiVisible ? 'Hide' : 'Show'}
+                </Text>
+              )}
+            </TouchableOpacity>
             <TouchableOpacity
               style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
               onPress={cycleUiMode}
               activeOpacity={0.9}
             >
-              <Feather name="eye-off" size={18} color="#ffffff" />
+              <Feather name="layout" size={18} color="#ffffff" />
               {uiMode === 'full' && (
                 <Text style={styles.actionButtonText}>
-                  {uiMode === 'full' ? 'Full' : 'Compact'}
+                  {uiMode}
                 </Text>
               )}
             </TouchableOpacity>
@@ -467,7 +476,17 @@ export default function FullscreenCanvas({
 
         {/* Bottom tools: collapsed handle -> expandable panel */}
         {uiMode !== 'minimal' && (
-          <View style={styles.toolsHandleContainer} pointerEvents={'auto'}>
+          <View 
+            style={[
+              styles.toolsHandleContainer,
+              {
+                bottom: Math.max(24, 24 + (insets?.bottom ?? 0)),
+                left: Math.max(16, 16 + (insets?.left ?? 0)),
+                right: Math.max(16, 16 + (insets?.right ?? 0)),
+              }
+            ]} 
+            pointerEvents={'auto'}
+          >
             {!toolsVisible ? (
               <TouchableOpacity style={styles.toolsHandle} onPress={() => setToolsVisible(true)}>
                 <Feather name="chevron-up" size={16} color="#111827" />
@@ -534,8 +553,8 @@ export default function FullscreenCanvas({
             styles.fabContainer,
             {
               opacity: uiVisible ? 1 : 0,
-              bottom: Math.max(16, 16 + (insets?.bottom ?? 0)),
-              right: Math.max(16, 16 + (insets?.right ?? 0)),
+              bottom: Math.max(24, 24 + (insets?.bottom ?? 0)),
+              right: Math.max(24, 24 + (insets?.right ?? 0)),
             },
           ]}
           pointerEvents={uiVisible || fabOpen ? 'auto' : 'none'}
@@ -645,28 +664,8 @@ export default function FullscreenCanvas({
 
 const styles = StyleSheet.create({
   fullscreenContainer: {
-  flex: 1,
+    flex: 1,
     backgroundColor: '#000000',
-  },
-  uiPeekContainer: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    zIndex: 30,
-  },
-  uiPeekButton: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 6,
-  },
-  uiPeekButtonActive: {
-    backgroundColor: 'rgba(255,255,255,1)',
   },
   safeArea: {
     flex: 1,
@@ -718,18 +717,19 @@ const styles = StyleSheet.create({
   
   // Top toolbar
   topActionsContainer: {
-  position: 'absolute',
-  top: 24,
-  left: 16,
-  right: 40, // more space to avoid Android nav buttons
+    position: 'absolute',
+    top: 24, // Will be overridden with safe area insets
+    left: 16,
+    right: 16, // Reduced from 40 to give more space, will be overridden with safe area insets
     zIndex: 10,
     gap: 12,
   },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8, // Reduced from 12 to prevent overflow
     flexWrap: 'wrap',
+    justifyContent: 'flex-start', // Better alignment on mobile
   },
   actionButton: {
     backgroundColor: '#6366f1',
@@ -747,17 +747,19 @@ const styles = StyleSheet.create({
   },
   smallActionButton: {
     backgroundColor: '#6366f1',
-    borderRadius: 18,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: 16, // Slightly smaller radius
+    paddingHorizontal: 8, // Reduced padding
+    paddingVertical: 6, // Reduced padding
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3, // Reduced gap
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
     elevation: 6,
+    minWidth: 36, // Ensure minimum touch target
+    minHeight: 36, // Ensure minimum touch target
   },
   activeActionButton: {
     backgroundColor: '#4f46e5',
@@ -770,13 +772,14 @@ const styles = StyleSheet.create({
   },
   zoomIndicator: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 12, // Smaller radius
+    paddingHorizontal: 8, // Reduced padding
+    paddingVertical: 6, // Reduced padding
+    minWidth: 50, // Ensure minimum width for readability
   },
   zoomText: {
     color: '#1f2937',
-    fontSize: 14,
+    fontSize: 12, // Smaller font
     fontWeight: '700',
   },
   // Zoom slider overlay removed
@@ -840,9 +843,9 @@ const styles = StyleSheet.create({
   // Collapsible Tools panel
   toolsHandleContainer: {
     position: 'absolute',
-    bottom: 24,
-  left: 0,
-  right: 12,
+    bottom: 24, // Will be overridden with safe area insets
+    left: 16, // Will be overridden with safe area insets
+    right: 16, // Will be overridden with safe area insets
     alignItems: 'center',
     zIndex: 12,
   },
@@ -869,7 +872,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.98)',
     borderRadius: 16,
     padding: 12,
-    marginHorizontal: 16,
+    marginHorizontal: 8, // Reduced from 16 to prevent overflow on small screens
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
@@ -880,17 +883,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8, // Reduced from 10 for mobile
     marginVertical: 4,
+    flexWrap: 'wrap', // Allow wrapping on small screens
   },
   toolChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4, // Reduced gap
     backgroundColor: '#9ca3af',
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: 14, // Smaller radius
+    paddingHorizontal: 8, // Reduced padding
+    paddingVertical: 6, // Reduced padding
+    minHeight: 32, // Ensure minimum touch target
   },
   toolChipActive: {
     backgroundColor: '#6366f1',
