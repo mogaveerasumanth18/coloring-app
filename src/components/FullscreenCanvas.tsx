@@ -167,6 +167,8 @@ export default function FullscreenCanvas({
   // Radial FAB menu state
   const [fabOpen, setFabOpen] = useState(false);
   const fabAnim = useRef(new Animated.Value(0)).current;
+  // UI visibility animation
+  const uiOpacityAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.timing(fabAnim, {
@@ -177,51 +179,76 @@ export default function FullscreenCanvas({
     }).start();
   }, [fabOpen, fabAnim]);
 
-  // Auto-hide UI shortly after entering fullscreen; can be revealed with the toggle
+  // Animate UI visibility changes
   useEffect(() => {
-    if (!isVisible) return;
-    const t = setTimeout(() => {
+    Animated.timing(uiOpacityAnim, {
+      toValue: uiVisible ? 1 : 0,
+      duration: 200,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+  }, [uiVisible, uiOpacityAnim]);
+
+  // Auto-hide UI timer ref to manage single timer
+  const autoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear any existing auto-hide timer
+  const clearAutoHideTimer = () => {
+    if (autoHideTimerRef.current) {
+      clearTimeout(autoHideTimerRef.current);
+      autoHideTimerRef.current = null;
+    }
+  };
+
+  // Start auto-hide timer
+  const startAutoHideTimer = () => {
+    clearAutoHideTimer();
+    autoHideTimerRef.current = setTimeout(() => {
       // Only hide UI if tools panel is not open
       if (!toolsVisible) {
         setUiVisible(false);
       }
-    }, 2500);
-    return () => clearTimeout(t);
-  }, [isVisible, toolsVisible]);
+    }, 3000); // Increased to 3 seconds for better UX
+  };
+
+  // Auto-hide UI shortly after entering fullscreen
+  useEffect(() => {
+    if (!isVisible) {
+      clearAutoHideTimer();
+      return;
+    }
+    startAutoHideTimer();
+    
+    return () => clearAutoHideTimer();
+  }, [isVisible]);
 
   // Reset auto-hide timer when tools panel is opened/closed
   useEffect(() => {
     if (toolsVisible) {
       // Keep UI visible when tools panel is open
       setUiVisible(true);
+      clearAutoHideTimer();
     } else {
-      // Reset auto-hide timer when tools panel is closed
-      const t = setTimeout(() => {
-        setUiVisible(false);
-      }, 2500);
-      return () => clearTimeout(t);
+      // Start auto-hide timer when tools panel is closed
+      startAutoHideTimer();
     }
   }, [toolsVisible]);
 
-  const revealUi = () => setUiVisible(true);
+  const revealUi = () => {
+    setUiVisible(true);
+    startAutoHideTimer();
+  };
+  
   const cycleUiMode = () => {
     setUiVisible(true);
     setUiMode((m) => (m === 'full' ? 'compact' : m === 'compact' ? 'minimal' : 'full'));
+    startAutoHideTimer();
   };
 
   // Function to keep UI visible when interacting with tools
   const keepUiVisible = () => {
     setUiVisible(true);
-    // Reset the auto-hide timer
-    if (isVisible) {
-      const t = setTimeout(() => {
-        // Only hide UI if tools panel is not open
-        if (!toolsVisible) {
-          setUiVisible(false);
-        }
-      }, 2500);
-      return () => clearTimeout(t);
-    }
+    startAutoHideTimer();
   };
 
   // Ensure native canvas updates brush width instantly even if it caches the value internally
@@ -362,12 +389,19 @@ export default function FullscreenCanvas({
     <View style={styles.fullscreenContainer}>
       <SafeAreaView style={styles.safeArea}>
         {/* Canvas area */}
-        <View
+        <TouchableOpacity
           style={[
             styles.canvasSection,
             // In Full mode avoid extra padding to prevent black bands; only pad in Compact.
             uiVisible && uiMode === 'compact' ? styles.canvasSectionPaddedCompact : null,
           ]}
+          onPress={() => {
+            if (!uiVisible) {
+              setUiVisible(true);
+              startAutoHideTimer();
+            }
+          }}
+          activeOpacity={1}
         >
           <View
             style={styles.canvasContainer}
@@ -421,17 +455,17 @@ export default function FullscreenCanvas({
               </View>
             )}
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Top toolbar */}
-        <View
+        <Animated.View
           style={[
             styles.topActionsContainer, 
             { 
-              opacity: uiVisible ? 1 : 0,
-              top: Math.max(24, 24 + (insets?.top ?? 0)),
-              left: Math.max(16, 16 + (insets?.left ?? 0)),
-              right: Math.max(16, 16 + (insets?.right ?? 0)),
+              opacity: uiOpacityAnim,
+              top: Math.max(24, 32 + (insets?.top ?? 0)),
+              left: Math.max(16, 20 + (insets?.left ?? 0)),
+              right: Math.max(16, 20 + (insets?.right ?? 0)),
             }
           ]}
           pointerEvents={uiVisible ? 'auto' : 'none'}
@@ -505,25 +539,33 @@ export default function FullscreenCanvas({
               )}
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Always visible UI toggle button for minimal mode or when UI is hidden */}
-        <TouchableOpacity
-          style={[
-            styles.uiToggle,
-            {
-              top: Math.max(20, 20 + (insets?.top ?? 0)),
-              right: Math.max(16, 16 + (insets?.right ?? 0)),
-              opacity: uiVisible ? 0 : 1,
-            }
-          ]}
-          onPress={() => setUiVisible(true)}
-          activeOpacity={0.9}
-          pointerEvents={!uiVisible ? 'auto' : 'none'}
-        >
-          <Feather name="eye" size={16} color="#111827" />
-          <Text style={styles.uiToggleText}>Show UI</Text>
-        </TouchableOpacity>
+        {!uiVisible && (
+          <Animated.View
+            style={[
+              styles.uiToggle,
+              {
+                opacity: uiOpacityAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 0], // Inverse of UI visibility
+                }),
+                top: Math.max(24, 32 + (insets?.top ?? 0)),
+                right: Math.max(20, 24 + (insets?.right ?? 0)),
+              }
+            ]}
+          >
+            <TouchableOpacity
+              onPress={() => setUiVisible(true)}
+              activeOpacity={0.9}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+            >
+              <Feather name="eye" size={16} color="#111827" />
+              <Text style={styles.uiToggleText}>Show UI</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
 
   {/* Bottom dock removed; replaced by collapsible Tools panel below */}
 
@@ -533,9 +575,9 @@ export default function FullscreenCanvas({
             style={[
               styles.toolsHandleContainer,
               {
-                bottom: Math.max(24, 24 + (insets?.bottom ?? 0)),
-                left: Math.max(16, 16 + (insets?.left ?? 0)),
-                right: Math.max(16, 16 + (insets?.right ?? 0)),
+                bottom: Math.max(32, 40 + (insets?.bottom ?? 0)),
+                left: Math.max(16, 20 + (insets?.left ?? 0)),
+                right: Math.max(16, 20 + (insets?.right ?? 0)),
               }
             ]} 
             pointerEvents={'auto'}
@@ -608,13 +650,13 @@ export default function FullscreenCanvas({
         )}
 
         {/* Radial floating actions (Save, Clear, Exit) */}
-        <View
+        <Animated.View
           style={[
             styles.fabContainer,
             {
-              opacity: uiVisible || fabOpen ? 1 : 0,
-              bottom: Math.max(24, 24 + (insets?.bottom ?? 0)),
-              right: Math.max(24, 24 + (insets?.right ?? 0)),
+              opacity: uiVisible || fabOpen ? uiOpacityAnim : 0,
+              bottom: Math.max(32, 40 + (insets?.bottom ?? 0)),
+              right: Math.max(28, 32 + (insets?.right ?? 0)),
             },
           ]}
           pointerEvents={uiVisible || fabOpen ? 'auto' : 'none'}
@@ -683,7 +725,7 @@ export default function FullscreenCanvas({
           >
             <Feather name={fabOpen ? 'x' : 'grid'} size={20} color="#ffffff" />
           </TouchableOpacity>
-        </View>
+        </Animated.View>
 
   {/* UI mode toggle chip removed in favor of toolbar button */}
       </SafeAreaView>
@@ -1116,21 +1158,25 @@ const styles = StyleSheet.create({
 
   // UI toggle chip
   uiToggle: {
-    position: 'absolute',
-    top: 20,
-    right: 16,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    backgroundColor: 'rgba(255,255,255,0.98)',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    zIndex: 20,
+    zIndex: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
   },
   uiToggleText: {
     color: '#111827',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
   },
 
