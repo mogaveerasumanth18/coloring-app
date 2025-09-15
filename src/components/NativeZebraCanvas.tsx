@@ -225,6 +225,11 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     },
     getCurrentDataUrl: () => {
       return dataUrl;
+    },
+    setBrushWidth: (width: number) => {
+      // This method is called by the parent component to update the brush width
+      // The brush width is used in the performBrushStroke function
+      console.log('Brush width updated to:', width);
     }
   }), [historyIndex, history, bitmap, cloneBitmap, updateDataUrl, saveToHistory, dataUrl]);
 

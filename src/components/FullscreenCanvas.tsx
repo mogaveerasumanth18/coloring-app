@@ -180,14 +180,48 @@ export default function FullscreenCanvas({
   // Auto-hide UI shortly after entering fullscreen; can be revealed with the toggle
   useEffect(() => {
     if (!isVisible) return;
-    const t = setTimeout(() => setUiVisible(false), 2500);
+    const t = setTimeout(() => {
+      // Only hide UI if tools panel is not open
+      if (!toolsVisible) {
+        setUiVisible(false);
+      }
+    }, 2500);
     return () => clearTimeout(t);
-  }, [isVisible]);
+  }, [isVisible, toolsVisible]);
+
+  // Reset auto-hide timer when tools panel is opened/closed
+  useEffect(() => {
+    if (toolsVisible) {
+      // Keep UI visible when tools panel is open
+      setUiVisible(true);
+    } else {
+      // Reset auto-hide timer when tools panel is closed
+      const t = setTimeout(() => {
+        setUiVisible(false);
+      }, 2500);
+      return () => clearTimeout(t);
+    }
+  }, [toolsVisible]);
 
   const revealUi = () => setUiVisible(true);
   const cycleUiMode = () => {
     setUiVisible(true);
     setUiMode((m) => (m === 'full' ? 'compact' : m === 'compact' ? 'minimal' : 'full'));
+  };
+
+  // Function to keep UI visible when interacting with tools
+  const keepUiVisible = () => {
+    setUiVisible(true);
+    // Reset the auto-hide timer
+    if (isVisible) {
+      const t = setTimeout(() => {
+        // Only hide UI if tools panel is not open
+        if (!toolsVisible) {
+          setUiVisible(false);
+        }
+      }, 2500);
+      return () => clearTimeout(t);
+    }
   };
 
   // Ensure native canvas updates brush width instantly even if it caches the value internally
@@ -396,6 +430,7 @@ export default function FullscreenCanvas({
             { 
               opacity: uiVisible ? 1 : 0,
               top: Math.max(24, 24 + (insets?.top ?? 0)),
+              left: Math.max(16, 16 + (insets?.left ?? 0)),
               right: Math.max(16, 16 + (insets?.right ?? 0)),
             }
           ]}
@@ -472,6 +507,24 @@ export default function FullscreenCanvas({
           </View>
         </View>
 
+        {/* Always visible UI toggle button for minimal mode or when UI is hidden */}
+        <TouchableOpacity
+          style={[
+            styles.uiToggle,
+            {
+              top: Math.max(20, 20 + (insets?.top ?? 0)),
+              right: Math.max(16, 16 + (insets?.right ?? 0)),
+              opacity: uiVisible ? 0 : 1,
+            }
+          ]}
+          onPress={() => setUiVisible(true)}
+          activeOpacity={0.9}
+          pointerEvents={!uiVisible ? 'auto' : 'none'}
+        >
+          <Feather name="eye" size={16} color="#111827" />
+          <Text style={styles.uiToggleText}>Show UI</Text>
+        </TouchableOpacity>
+
   {/* Bottom dock removed; replaced by collapsible Tools panel below */}
 
         {/* Bottom tools: collapsed handle -> expandable panel */}
@@ -524,14 +577,21 @@ export default function FullscreenCanvas({
                 <View style={styles.toolsRow}>
                   <Text style={styles.sizeLabel}>Size: {Math.round(currentBrushSize)}px</Text>
                   <Slider
+                    key={`slider-${currentBrushSize}`}
                     style={styles.sizeSlider}
                     minimumValue={2}
                     maximumValue={50}
                     value={currentBrushSize}
                     step={1}
-                    onSlidingStart={() => setUiVisible(true)}
-                    onValueChange={(v: number) => setCurrentBrushSize(v)}
-                    onSlidingComplete={(v: number) => setCurrentBrushSize(v)}
+                    onSlidingStart={keepUiVisible}
+                    onValueChange={(v: number) => {
+                      keepUiVisible();
+                      setCurrentBrushSize(v);
+                    }}
+                    onSlidingComplete={(v: number) => {
+                      keepUiVisible();
+                      setCurrentBrushSize(v);
+                    }}
                     minimumTrackTintColor="#6366f1"
                     maximumTrackTintColor="#CBD5E1"
                     thumbTintColor="#6366f1"
@@ -552,7 +612,7 @@ export default function FullscreenCanvas({
           style={[
             styles.fabContainer,
             {
-              opacity: uiVisible ? 1 : 0,
+              opacity: uiVisible || fabOpen ? 1 : 0,
               bottom: Math.max(24, 24 + (insets?.bottom ?? 0)),
               right: Math.max(24, 24 + (insets?.right ?? 0)),
             },
