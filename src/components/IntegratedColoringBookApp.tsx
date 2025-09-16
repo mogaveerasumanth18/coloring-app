@@ -959,21 +959,22 @@ const styles = StyleSheet.create({
   },
   toolsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around', // Changed from space-between to space-around for better mobile fitting
-    gap: 6, // Reduced gap from 10 to 6
+    justifyContent: 'space-between', // Changed back to space-between for even distribution
+    gap: 4, // Further reduced gap from 6 to 4
     marginBottom: 16,
     flexWrap: 'wrap', // Allow wrapping on very small screens
+    paddingHorizontal: 8, // Add horizontal padding to container
   },
   toolButton: {
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12, // Reduced from 16 to 12
-    borderRadius: 16,
+    paddingVertical: 10, // Reduced from 12 to 10
+    paddingHorizontal: 8, // Further reduced from 12 to 8
+    borderRadius: 12, // Reduced from 16 to 12
     backgroundColor: '#F1F5F9',
-    minWidth: 72, // Reduced from 80 to 72
+    minWidth: 64, // Further reduced from 72 to 64
     flex: 1, // Allow buttons to grow equally
-    maxWidth: 85, // Prevent buttons from getting too wide
-    marginHorizontal: 2, // Reduced from 4 to 2
+    maxWidth: 76, // Reduced from 85 to 76
+    marginHorizontal: 1, // Further reduced from 2 to 1
     shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -989,10 +990,10 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   toolLabel: {
-    fontSize: 12,
+    fontSize: 11, // Reduced from 12 to 11
     fontWeight: '600',
     color: '#64748B',
-    marginTop: 4,
+    marginTop: 2, // Reduced from 4 to 2
   },
   activeToolLabel: {
     color: '#FFFFFF',
