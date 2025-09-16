@@ -20,6 +20,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { captureRef } from 'react-native-view-shot';
 import * as MediaLibrary from 'expo-media-library';
+import {
+  PanGestureHandler,
+  PinchGestureHandler,
+} from 'react-native-gesture-handler';
+import ReanimatedAnimated, { useSharedValue, useAnimatedGestureHandler, useAnimatedStyle, runOnJS } from 'react-native-reanimated';
 
 import { WorkingColoringCanvas } from './WorkingColoringCanvas';
 import { ZebraColoringCanvas } from './ZebraColoringCanvas';
@@ -31,7 +36,7 @@ interface FullscreenCanvasProps {
   onClose: () => void;
   templateUri?: string;
   selectedColor: string;
-  selectedTool: 'brush' | 'bucket' | 'eraser';
+  selectedTool: 'brush' | 'bucket' | 'eraser' | 'move';
   brushSize: number;
   onColoringChange?: () => void;
   onColoringComplete?: (dataUrl?: string) => void;
@@ -153,7 +158,7 @@ export default function FullscreenCanvas({
     '#111827', '#374151', '#6b7280', '#9ca3af', '#e5e7eb', '#ffffff',
   ]);
   const [currentColor, setCurrentColor] = useState(selectedColor);
-  const [currentTool, setCurrentTool] = useState<'brush' | 'bucket' | 'eraser'>(selectedTool);
+  const [currentTool, setCurrentTool] = useState<'brush' | 'bucket' | 'eraser' | 'move'>(selectedTool);
   const [currentBrushSize, setCurrentBrushSize] = useState(brushSize);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const canvasRef = useRef<any>(null);
@@ -169,6 +174,62 @@ export default function FullscreenCanvas({
   const fabAnim = useRef(new Animated.Value(0)).current;
   // UI visibility animation
   const uiOpacityAnim = useRef(new Animated.Value(1)).current;
+
+  // Pan and zoom gesture handling for move tool
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const scale = useSharedValue(zoom);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+  const savedScale = useSharedValue(zoom);
+
+  // Update zoom state when scale changes
+  const updateZoom = (newZoom: number) => {
+    const clampedZoom = clampZoom(newZoom);
+    setZoom(clampedZoom);
+    scale.value = clampedZoom;
+  };
+
+  const panHandler = useAnimatedGestureHandler({
+    onStart: () => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    },
+    onActive: (event) => {
+      translateX.value = savedTranslateX.value + event.translationX;
+      translateY.value = savedTranslateY.value + event.translationY;
+    },
+    onEnd: () => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    },
+  });
+
+  const pinchHandler = useAnimatedGestureHandler({
+    onStart: () => {
+      savedScale.value = scale.value;
+    },
+    onActive: (event: any) => {
+      const newScale = savedScale.value * event.scale;
+      if (newScale >= MIN_ZOOM && newScale <= MAX_ZOOM) {
+        scale.value = newScale;
+        runOnJS(updateZoom)(newScale);
+      }
+    },
+    onEnd: () => {
+      savedScale.value = scale.value;
+    },
+  });
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+        { scale: scale.value },
+      ],
+    };
+  });
 
   useEffect(() => {
     Animated.timing(fabAnim, {
@@ -416,38 +477,45 @@ export default function FullscreenCanvas({
                   <Text style={styles.emptyCanvasText}>Loading image…</Text>
                 </View>
               ) : (
-                <View
-                  ref={captureViewRef}
-                  collapsable={false}
-                  style={{
-                    width: computeFit(canvasSize, templateSize).width,
-                    height: computeFit(canvasSize, templateSize).height,
-                    transform: [{ scale: zoom }],
-                  }}
-                >
-                  {Platform.OS === 'web' ? (
-                    <WorkingColoringCanvas
-                      selectedColor={currentColor}
-                      selectedTool={currentTool}
-                      brushSize={currentBrushSize}
-                      templateUri={templateUri}
-                      width={computeFit(canvasSize, templateSize).width}
-                      height={computeFit(canvasSize, templateSize).height}
-                    />
-                  ) : (
-                    <NativeZebraCanvas
-                      ref={canvasRef}
-                      templateUri={templateUri}
-                      selectedColor={currentColor}
-                      selectedTool={currentTool}
-                      brushWidth={currentBrushSize}
-                      onColoringComplete={onColoringComplete}
-                      width={computeFit(canvasSize, templateSize).width}
-                      height={computeFit(canvasSize, templateSize).height}
-                      initialDataUrl={initialCanvasData}
-                    />
-                  )}
-                </View>
+                <PinchGestureHandler onGestureEvent={pinchHandler}>
+                  <PanGestureHandler onGestureEvent={panHandler} minPointers={currentTool === 'move' ? 1 : 2}>
+                    <ReanimatedAnimated.View
+                      ref={captureViewRef}
+                      collapsable={false}
+                      style={[
+                        {
+                          width: computeFit(canvasSize, templateSize).width,
+                          height: computeFit(canvasSize, templateSize).height,
+                        },
+                        currentTool === 'move' ? animatedStyle : { transform: [{ scale: zoom }] }
+                      ]}
+                    >
+                      {Platform.OS === 'web' ? (
+                        <WorkingColoringCanvas
+                          selectedColor={currentColor}
+                          selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                          brushSize={currentBrushSize}
+                          templateUri={templateUri}
+                          width={computeFit(canvasSize, templateSize).width}
+                          height={computeFit(canvasSize, templateSize).height}
+                        />
+                      ) : (
+                        <NativeZebraCanvas
+                          ref={canvasRef}
+                          templateUri={templateUri}
+                          selectedColor={currentColor}
+                          selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                          brushWidth={currentBrushSize}
+                          onColoringComplete={onColoringComplete}
+                          width={computeFit(canvasSize, templateSize).width}
+                          height={computeFit(canvasSize, templateSize).height}
+                          initialDataUrl={initialCanvasData}
+                          interactionEnabled={currentTool !== 'move'}
+                        />
+                      )}
+                    </ReanimatedAnimated.View>
+                  </PanGestureHandler>
+                </PinchGestureHandler>
               )
             ) : (
               <View style={styles.emptyCanvas}>
@@ -489,14 +557,14 @@ export default function FullscreenCanvas({
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-                  onPress={() => setZoom((prev) => clampZoom(prev + 0.25))}
+                  onPress={() => updateZoom(zoom + 0.25)}
                 >
                   <Feather name="zoom-in" size={18} color="#ffffff" />
                   {uiMode === 'full' && <Text style={styles.actionButtonText}>Zoom In</Text>}
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-                  onPress={() => setZoom((prev) => clampZoom(prev - 0.25))}
+                  onPress={() => updateZoom(zoom - 0.25)}
                 >
                   <Feather name="zoom-out" size={18} color="#ffffff" />
                   {uiMode === 'full' && <Text style={styles.actionButtonText}>Zoom Out</Text>}
@@ -506,7 +574,7 @@ export default function FullscreenCanvas({
                 </View>
                 <TouchableOpacity
                   style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-                  onPress={() => setZoom(1)}
+                  onPress={() => updateZoom(1)}
                 >
                   <Feather name="refresh-ccw" size={18} color="#ffffff" />
                   {uiMode === 'full' && <Text style={styles.actionButtonText}>Reset</Text>}
@@ -575,7 +643,7 @@ export default function FullscreenCanvas({
             style={[
               styles.toolsHandleContainer,
               {
-                bottom: Math.max(32, 40 + (insets?.bottom ?? 0)),
+                bottom: Math.max(48, 60 + (insets?.bottom ?? 0)), // Increased padding to match FAB
                 left: Math.max(16, 20 + (insets?.left ?? 0)),
                 right: Math.max(16, 20 + (insets?.right ?? 0)),
               }
@@ -610,6 +678,13 @@ export default function FullscreenCanvas({
                   >
                     <MaterialIcons name="auto-fix-off" size={18} color="#ffffff" />
                     <Text style={styles.toolChipText}>Eraser</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.toolChip, currentTool === 'move' && styles.toolChipActive]}
+                    onPress={() => setCurrentTool('move')}
+                  >
+                    <Feather name="move" size={18} color="#ffffff" />
+                    <Text style={styles.toolChipText}>Move</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.toolChip} onPress={() => setShowColorPicker(true)}>
                     <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
@@ -655,8 +730,8 @@ export default function FullscreenCanvas({
             styles.fabContainer,
             {
               opacity: uiVisible || fabOpen ? uiOpacityAnim : 0,
-              bottom: Math.max(32, 40 + (insets?.bottom ?? 0)),
-              right: Math.max(28, 32 + (insets?.right ?? 0)),
+              bottom: Math.max(48, 60 + (insets?.bottom ?? 0)), // Increased padding significantly
+              right: Math.max(32, 40 + (insets?.right ?? 0)), // Increased right padding too
             },
           ]}
           pointerEvents={uiVisible || fabOpen ? 'auto' : 'none'}
@@ -767,7 +842,7 @@ export default function FullscreenCanvas({
 const styles = StyleSheet.create({
   fullscreenContainer: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: 'transparent', // Changed from '#000000' to transparent
   },
   safeArea: {
     flex: 1,

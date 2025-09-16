@@ -705,7 +705,7 @@ export default function IntegratedColoringBookApp({
         onClose={() => setIsFullscreen(false)}
         templateUri={currentTemplate?.bitmapUri}
         selectedColor={selectedColor}
-        selectedTool={selectedTool === 'move' ? 'brush' : selectedTool}
+        selectedTool={selectedTool as 'brush' | 'bucket' | 'eraser' | 'move'}
         brushSize={brushSize}
         onColoringChange={() => {}}
         onColoringComplete={(dataUrl: string) => {
@@ -959,18 +959,21 @@ const styles = StyleSheet.create({
   },
   toolsRow: {
     flexDirection: 'row',
-  justifyContent: 'space-between',
-  gap: 10,
+    justifyContent: 'space-around', // Changed from space-between to space-around for better mobile fitting
+    gap: 6, // Reduced gap from 10 to 6
     marginBottom: 16,
+    flexWrap: 'wrap', // Allow wrapping on very small screens
   },
   toolButton: {
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12, // Reduced from 16 to 12
     borderRadius: 16,
     backgroundColor: '#F1F5F9',
-    minWidth: 80,
-  marginHorizontal: 4,
+    minWidth: 72, // Reduced from 80 to 72
+    flex: 1, // Allow buttons to grow equally
+    maxWidth: 85, // Prevent buttons from getting too wide
+    marginHorizontal: 2, // Reduced from 4 to 2
     shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
