@@ -23,8 +23,17 @@ import * as MediaLibrary from 'expo-media-library';
 import {
   PanGestureHandler,
   PinchGestureHandler,
+  GestureHandlerRootView,
+  State,
 } from 'react-native-gesture-handler';
-import ReanimatedAnimated, { useSharedValue, useAnimatedGestureHandler, useAnimatedStyle, runOnJS } from 'react-native-reanimated';
+import ReanimatedAnimated, { 
+  useSharedValue, 
+  useAnimatedGestureHandler, 
+  useAnimatedStyle, 
+  runOnJS,
+  withSpring,
+  withDecay
+} from 'react-native-reanimated';
 
 import { WorkingColoringCanvas } from './WorkingColoringCanvas';
 import { ZebraColoringCanvas } from './ZebraColoringCanvas';
@@ -182,6 +191,8 @@ export default function FullscreenCanvas({
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
   const savedScale = useSharedValue(zoom);
+  const focalX = useSharedValue(0);
+  const focalY = useSharedValue(0);
 
   // Update zoom state when scale changes
   const updateZoom = (newZoom: number) => {
@@ -196,8 +207,11 @@ export default function FullscreenCanvas({
       savedTranslateY.value = translateY.value;
     },
     onActive: (event) => {
-      translateX.value = savedTranslateX.value + event.translationX;
-      translateY.value = savedTranslateY.value + event.translationY;
+      // Only allow panning in move mode
+      if (currentTool === 'move') {
+        translateX.value = savedTranslateX.value + event.translationX;
+        translateY.value = savedTranslateY.value + event.translationY;
+      }
     },
     onEnd: () => {
       savedTranslateX.value = translateX.value;
@@ -206,18 +220,34 @@ export default function FullscreenCanvas({
   });
 
   const pinchHandler = useAnimatedGestureHandler({
-    onStart: () => {
+    onStart: (event: any) => {
       savedScale.value = scale.value;
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+      focalX.value = event.focalX;
+      focalY.value = event.focalY;
     },
     onActive: (event: any) => {
       const newScale = savedScale.value * event.scale;
-      if (newScale >= MIN_ZOOM && newScale <= MAX_ZOOM) {
-        scale.value = newScale;
-        runOnJS(updateZoom)(newScale);
+      const clampedScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newScale));
+      
+      if (clampedScale !== scale.value) {
+        // Calculate focal point adjustment
+        const scaleDiff = clampedScale - savedScale.value;
+        const adjustX = (focalX.value - savedTranslateX.value) * (scaleDiff / savedScale.value);
+        const adjustY = (focalY.value - savedTranslateY.value) * (scaleDiff / savedScale.value);
+        
+        scale.value = clampedScale;
+        translateX.value = savedTranslateX.value - adjustX;
+        translateY.value = savedTranslateY.value - adjustY;
+        
+        runOnJS(updateZoom)(clampedScale);
       }
     },
     onEnd: () => {
       savedScale.value = scale.value;
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
     },
   });
 
@@ -311,6 +341,23 @@ export default function FullscreenCanvas({
     setUiVisible(true);
     startAutoHideTimer();
   };
+
+  // Sync zoom state with shared values
+  useEffect(() => {
+    scale.value = zoom;
+  }, [zoom, scale]);
+
+  // Reset transform when switching away from move tool
+  useEffect(() => {
+    if (currentTool !== 'move') {
+      translateX.value = withSpring(0);
+      translateY.value = withSpring(0);
+      scale.value = withSpring(zoom);
+      savedTranslateX.value = 0;
+      savedTranslateY.value = 0;
+      savedScale.value = zoom;
+    }
+  }, [currentTool, translateX, translateY, scale, zoom, savedTranslateX, savedTranslateY, savedScale]);
 
   // Ensure native canvas updates brush width instantly even if it caches the value internally
   useEffect(() => {
@@ -477,45 +524,49 @@ export default function FullscreenCanvas({
                   <Text style={styles.emptyCanvasText}>Loading image…</Text>
                 </View>
               ) : (
-                <PinchGestureHandler onGestureEvent={pinchHandler}>
-                  <PanGestureHandler onGestureEvent={panHandler} minPointers={currentTool === 'move' ? 1 : 2}>
-                    <ReanimatedAnimated.View
-                      ref={captureViewRef}
-                      collapsable={false}
-                      style={[
-                        {
-                          width: computeFit(canvasSize, templateSize).width,
-                          height: computeFit(canvasSize, templateSize).height,
-                        },
-                        currentTool === 'move' ? animatedStyle : { transform: [{ scale: zoom }] }
-                      ]}
-                    >
-                      {Platform.OS === 'web' ? (
-                        <WorkingColoringCanvas
-                          selectedColor={currentColor}
-                          selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                          brushSize={currentBrushSize}
-                          templateUri={templateUri}
-                          width={computeFit(canvasSize, templateSize).width}
-                          height={computeFit(canvasSize, templateSize).height}
-                        />
-                      ) : (
-                        <NativeZebraCanvas
-                          ref={canvasRef}
-                          templateUri={templateUri}
-                          selectedColor={currentColor}
-                          selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                          brushWidth={currentBrushSize}
-                          onColoringComplete={onColoringComplete}
-                          width={computeFit(canvasSize, templateSize).width}
-                          height={computeFit(canvasSize, templateSize).height}
-                          initialDataUrl={initialCanvasData}
-                          interactionEnabled={currentTool !== 'move'}
-                        />
-                      )}
+                <GestureHandlerRootView style={{ flex: 1 }}>
+                  <PinchGestureHandler onGestureEvent={pinchHandler}>
+                    <ReanimatedAnimated.View style={{ flex: 1 }}>
+                      <PanGestureHandler onGestureEvent={panHandler}>
+                        <ReanimatedAnimated.View
+                          ref={captureViewRef}
+                          collapsable={false}
+                          style={[
+                            {
+                              width: computeFit(canvasSize, templateSize).width,
+                              height: computeFit(canvasSize, templateSize).height,
+                            },
+                            animatedStyle
+                          ]}
+                        >
+                          {Platform.OS === 'web' ? (
+                            <WorkingColoringCanvas
+                              selectedColor={currentColor}
+                              selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                              brushSize={currentBrushSize}
+                              templateUri={templateUri}
+                              width={computeFit(canvasSize, templateSize).width}
+                              height={computeFit(canvasSize, templateSize).height}
+                            />
+                          ) : (
+                            <NativeZebraCanvas
+                              ref={canvasRef}
+                              templateUri={templateUri}
+                              selectedColor={currentColor}
+                              selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                              brushWidth={currentBrushSize}
+                              onColoringComplete={onColoringComplete}
+                              width={computeFit(canvasSize, templateSize).width}
+                              height={computeFit(canvasSize, templateSize).height}
+                              initialDataUrl={initialCanvasData}
+                              interactionEnabled={currentTool !== 'move'}
+                            />
+                          )}
+                        </ReanimatedAnimated.View>
+                      </PanGestureHandler>
                     </ReanimatedAnimated.View>
-                  </PanGestureHandler>
-                </PinchGestureHandler>
+                  </PinchGestureHandler>
+                </GestureHandlerRootView>
               )
             ) : (
               <View style={styles.emptyCanvas}>
