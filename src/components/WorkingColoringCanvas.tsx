@@ -24,6 +24,7 @@ interface WorkingColoringCanvasProps {
   onColoringChange?: (imageData: string) => void;
   width?: number;
   height?: number;
+  interactionEnabled?: boolean;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -39,6 +40,7 @@ export const WorkingColoringCanvas = React.forwardRef<any, WorkingColoringCanvas
       onColoringChange,
   width,
   height,
+      interactionEnabled = true,
     },
     ref
   ) => {
@@ -316,7 +318,7 @@ export const WorkingColoringCanvas = React.forwardRef<any, WorkingColoringCanvas
     };
 
     const panResponder = PanResponder.create({
-      onStartShouldSetPanResponder: () => isReady,
+      onStartShouldSetPanResponder: () => isReady && interactionEnabled,
       onPanResponderGrant: (evt) => {
         const { locationX, locationY } = evt.nativeEvent;
         if (selectedTool === 'bucket') {

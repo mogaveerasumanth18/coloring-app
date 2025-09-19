@@ -517,6 +517,7 @@ export default function IntegratedColoringBookApp({
                       selectedTool={selectedTool === 'move' ? 'brush' : selectedTool}
                       brushSize={brushSize}
                       templateUri={currentTemplate.bitmapUri}
+                      interactionEnabled={!showColorTray}
                     />
                   </Animated.View>
                 </PanGestureHandler>
@@ -541,7 +542,7 @@ export default function IntegratedColoringBookApp({
         onColoringComplete={(uri: string) => setCanvasSnapshot(uri)}
                     width={screenWidth - 32}
                     height={(screenWidth - 32) * 0.8}
-                    interactionEnabled={selectedTool !== 'move'}
+                    interactionEnabled={selectedTool !== 'move' && !showColorTray}
         initialDataUrl={canvasSnapshot ?? undefined}
                   />
                 </Animated.View>
