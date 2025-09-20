@@ -176,7 +176,6 @@ export default function IntegratedColoringBookApp({
   const [canvasSnapshot, setCanvasSnapshot] = useState<string | null>(null);
   // Gesture/slider helpers
   const sliderGestureRef = useRef<any>(null);
-  const colorPickerGestureRef = useRef<any>(null);
   const panGestureRef = useRef<any>(null);
   const pinchGestureRef = useRef<any>(null);
   
@@ -502,13 +501,13 @@ export default function IntegratedColoringBookApp({
       <PinchGestureHandler 
         ref={pinchGestureRef}
         onGestureEvent={pinchHandler}
-        simultaneousHandlers={[panGestureRef, sliderGestureRef, colorPickerGestureRef]}
+        simultaneousHandlers={[panGestureRef, sliderGestureRef]}
       >
               <Animated.View style={styles.modernCanvasContainer}>
                 <PanGestureHandler 
                   ref={panGestureRef}
                   onGestureEvent={panHandler} 
-                  simultaneousHandlers={[pinchGestureRef, sliderGestureRef, colorPickerGestureRef]}
+                  simultaneousHandlers={[pinchGestureRef, sliderGestureRef]}
                 >
                   <Animated.View style={[animatedStyle, { flex: 1 }]}>
                     <WorkingColoringCanvas
@@ -530,7 +529,7 @@ export default function IntegratedColoringBookApp({
               <PanGestureHandler 
                 onGestureEvent={panHandler} 
                 minPointers={selectedTool === 'move' ? 1 : 2} 
-                simultaneousHandlers={[sliderGestureRef, colorPickerGestureRef]}
+                simultaneousHandlers={[sliderGestureRef]}
               >
                 <Animated.View style={[animatedStyle, { flex: 1 }]}>
                   <NativeZebraCanvas
@@ -618,13 +617,9 @@ export default function IntegratedColoringBookApp({
                   onChange={(v) => setBrushSize(v)}
                   min={5}
                   max={100}
-                  simultaneousHandlers={[sliderGestureRef, colorPickerGestureRef]}
                 />
               ) : (
-                <NativeViewGestureHandler 
-                  ref={sliderGestureRef}
-                  simultaneousHandlers={[colorPickerGestureRef, panGestureRef, pinchGestureRef]}
-                >
+                <NativeViewGestureHandler ref={sliderGestureRef}>
                   <View style={{ flex: 1 }}>
                     <Slider
                       style={styles.sizeSlider}
@@ -833,18 +828,27 @@ export default function IntegratedColoringBookApp({
               })()}
               {/* Compact color picker (wheel disabled on Android to avoid crashes) */}
               <View style={styles.wheelContainer}>
-                <NativeViewGestureHandler ref={colorPickerGestureRef}>
-                  <View>
-                    <ColorPickerErrorBoundary>
+                <View style={{ 
+                  backgroundColor: 'white', 
+                  borderRadius: 12, 
+                  padding: 16,
+                  elevation: 4,
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 4
+                }}>
+                  <ColorPickerErrorBoundary>
                       {Platform.OS === 'android' ? (
                         // Safer native picker: use hue and brightness sliders only
                         <ColorPicker
                           value={selectedColor}
                           onComplete={(c: any) => {
                             try {
-                              setSelectedColor(c.hex);
+                              if (c && c.hex) {
+                                setSelectedColor(c.hex);
+                              }
                             } catch (error) {
-                              console.warn('Color picker onComplete error:', error);
+                              console.warn('Android Color picker onComplete error:', error);
                             }
                           }}
                           style={{ width: '100%' }}
@@ -858,9 +862,11 @@ export default function IntegratedColoringBookApp({
                           value={selectedColor}
                           onComplete={(c: any) => {
                             try {
-                              setSelectedColor(c.hex);
+                              if (c && c.hex) {
+                                setSelectedColor(c.hex);
+                              }
                             } catch (error) {
-                              console.warn('Color picker onComplete error:', error);
+                              console.warn('iOS Color picker onComplete error:', error);
                             }
                           }}
                           style={{ width: '100%' }}
@@ -873,7 +879,6 @@ export default function IntegratedColoringBookApp({
                       )}
                     </ColorPickerErrorBoundary>
                   </View>
-                </NativeViewGestureHandler>
               </View>
               <TouchableOpacity style={styles.centerModalClose} onPress={() => setShowColorTray(false)}>
                 <Text style={styles.centerModalCloseText}>Close</Text>
