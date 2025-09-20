@@ -12,16 +12,12 @@ import {
   View,
 } from 'react-native';
 import {
-  PanGestureHandler,
-  PinchGestureHandler,
-  State,
-  NativeViewGestureHandler,
+  Gesture,
+  GestureDetector,
 } from 'react-native-gesture-handler';
-import ColorPicker, { Panel3, HueSlider, BrightnessSlider, Preview } from 'reanimated-color-picker';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  useAnimatedGestureHandler,
   withSpring,
   runOnJS,
 } from 'react-native-reanimated';
@@ -38,7 +34,6 @@ import Slider from '@react-native-community/slider';
 import { PngTemplateService } from '../services/PngTemplateService';
 import { ImageUploaderEnhanced } from './ImageUploaderEnhanced';
 import { WorkingColoringCanvas } from './WorkingColoringCanvas';
-import { ZebraColoringCanvas } from './ZebraColoringCanvas';
 import { NativeZebraCanvas } from './NativeZebraCanvas';
 import FullscreenCanvas from './FullscreenCanvas';
 
@@ -48,37 +43,124 @@ const MODAL_SIDE_PADDING = 16;
 const SWATCH_GAP = 12;
 const DEFAULT_SWATCH_SIZE = 44; // will shrink/grow based on width
 
-// Simple error boundary component for color picker
-class ColorPickerErrorBoundary extends React.Component<
-  { children: React.ReactNode; fallback?: React.ReactNode },
-  { hasError: boolean }
-> {
-  constructor(props: any) {
-    super(props);
-    this.state = { hasError: false };
+// Color conversion utilities
+const hsvToRgb = (h: number, s: number, v: number): [number, number, number] => {
+  const c = v * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = v - c;
+
+  let r = 0, g = 0, b = 0;
+
+  if (0 <= h && h < 60) {
+    r = c; g = x; b = 0;
+  } else if (60 <= h && h < 120) {
+    r = x; g = c; b = 0;
+  } else if (120 <= h && h < 180) {
+    r = 0; g = c; b = x;
+  } else if (180 <= h && h < 240) {
+    r = 0; g = x; b = c;
+  } else if (240 <= h && h < 300) {
+    r = x; g = 0; b = c;
+  } else if (300 <= h && h < 360) {
+    r = c; g = 0; b = x;
   }
 
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
+  return [
+    Math.round((r + m) * 255),
+    Math.round((g + m) * 255),
+    Math.round((b + m) * 255)
+  ];
+};
 
-  componentDidCatch(error: any, errorInfo: any) {
-    console.warn('ColorPicker error caught:', error, errorInfo);
-  }
+const rgbToHex = (r: number, g: number, b: number): string => {
+  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+};
 
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback || (
-        <View style={{ padding: 16, alignItems: 'center' }}>
-          <Text style={{ color: '#ef4444', fontSize: 14, textAlign: 'center' }}>
-            Color picker temporarily unavailable
-          </Text>
-        </View>
-      );
-    }
-    return this.props.children;
-  }
-}
+const hsvToHex = (h: number, s: number, v: number): string => {
+  const [r, g, b] = hsvToRgb(h, s, v);
+  return rgbToHex(r, g, b);
+};
+
+// Custom Color Picker Component
+const CustomColorPicker = ({ 
+  selectedColor, 
+  onColorChange 
+}: { 
+  selectedColor: string; 
+  onColorChange: (color: string) => void;
+}) => {
+  const [hue, setHue] = useState(0);
+  const [saturation, setSaturation] = useState(1);
+  const [brightness, setBrightness] = useState(1);
+
+  useEffect(() => {
+    const newColor = hsvToHex(hue, saturation, brightness);
+    onColorChange(newColor);
+  }, [hue, saturation, brightness, onColorChange]);
+
+  return (
+    <View style={{ padding: 16 }}>
+      {/* Color Preview */}
+      <View style={{
+        width: '100%',
+        height: 40,
+        backgroundColor: selectedColor,
+        borderRadius: 8,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#E2E8F0'
+      }} />
+
+      {/* Hue Slider */}
+      <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#1F2937' }}>
+        Hue
+      </Text>
+      <Slider
+        style={{ width: '100%', height: 40 }}
+        minimumValue={0}
+        maximumValue={360}
+        value={hue}
+        step={1}
+        onValueChange={setHue}
+        minimumTrackTintColor="#FF0000"
+        maximumTrackTintColor="#E2E8F0"
+        thumbTintColor="#6366f1"
+      />
+
+      {/* Saturation Slider */}
+      <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8, marginTop: 16, color: '#1F2937' }}>
+        Saturation
+      </Text>
+      <Slider
+        style={{ width: '100%', height: 40 }}
+        minimumValue={0}
+        maximumValue={1}
+        value={saturation}
+        step={0.01}
+        onValueChange={setSaturation}
+        minimumTrackTintColor="#6366f1"
+        maximumTrackTintColor="#E2E8F0"
+        thumbTintColor="#6366f1"
+      />
+
+      {/* Brightness Slider */}
+      <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8, marginTop: 16, color: '#1F2937' }}>
+        Brightness
+      </Text>
+      <Slider
+        style={{ width: '100%', height: 40 }}
+        minimumValue={0}
+        maximumValue={1}
+        value={brightness}
+        step={0.01}
+        onValueChange={setBrightness}
+        minimumTrackTintColor="#6366f1"
+        maximumTrackTintColor="#E2E8F0"
+        thumbTintColor="#6366f1"
+      />
+    </View>
+  );
+};
 
 // Small custom slider for Android to avoid gesture conflicts with the native Slider
 function SizeSliderNative({
@@ -86,13 +168,11 @@ function SizeSliderNative({
   onChange,
   min = 5,
   max = 100,
-  simultaneousHandlers,
 }: {
   value: number;
   onChange: (v: number) => void;
   min?: number;
   max?: number;
-  simultaneousHandlers?: any;
 }) {
   const [trackW, setTrackW] = React.useState(0);
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -108,44 +188,39 @@ function SizeSliderNative({
     return Math.round(min + p * (max - min));
   };
 
-  const onPanEvent = React.useCallback((evt: any) => {
-    try {
-      const x = evt.nativeEvent.x ?? 0; // absolute inside the track
-      onChange(xToVal(x));
-    } catch (error) {
-      console.warn('SizeSliderNative onPanEvent error:', error);
-    }
-  }, [trackW, onChange, xToVal]);
-
-  const onPanStateChange = React.useCallback((evt: any) => {
-    try {
-      if (evt.nativeEvent?.x != null) {
-        onChange(xToVal(evt.nativeEvent.x));
+  const sliderPanGesture = Gesture.Pan()
+    .onUpdate((event) => {
+      try {
+        const x = event.x ?? 0; // absolute inside the track
+        onChange(xToVal(x));
+      } catch (error) {
+        console.warn('SizeSliderNative onUpdate error:', error);
       }
-    } catch (error) {
-      console.warn('SizeSliderNative onPanStateChange error:', error);
-    }
-  }, [trackW, onChange, xToVal]);
+    })
+    .onEnd((event) => {
+      try {
+        if (event.x != null) {
+          onChange(xToVal(event.x));
+        }
+      } catch (error) {
+        console.warn('SizeSliderNative onEnd error:', error);
+      }
+    })
+    .shouldCancelWhenOutside(true)
+    .minDistance(0);
 
   const thumbX = valToX(value);
   const THUMB = 28;
 
   return (
-    <PanGestureHandler 
-      onGestureEvent={onPanEvent} 
-      onHandlerStateChange={onPanStateChange} 
-      simultaneousHandlers={simultaneousHandlers}
-      shouldCancelWhenOutside={true}
-      minDist={0}
-      activeOffsetX={[-5, 5]}
-    >
+    <GestureDetector gesture={sliderPanGesture}>
       <View style={styles.customSliderWrap}>
         <View style={styles.customSliderTrack} onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}>
           <View style={[styles.customSliderFill, { width: thumbX }]} />
           <View style={[styles.customSliderThumb, { left: Math.max(0, thumbX - THUMB / 2), width: THUMB, height: THUMB }]} />
         </View>
       </View>
-    </PanGestureHandler>
+    </GestureDetector>
   );
 }
 
@@ -174,10 +249,12 @@ export default function IntegratedColoringBookApp({
   const captureViewRef = useRef<View>(null);
   // Persist canvas across modal toggles/remounts
   const [canvasSnapshot, setCanvasSnapshot] = useState<string | null>(null);
-  // Gesture/slider helpers
-  const sliderGestureRef = useRef<any>(null);
+  // Gesture/refs helpers (keeping refs for compatibility)
   const panGestureRef = useRef<any>(null);
   const pinchGestureRef = useRef<any>(null);
+  
+  // Native gesture for slider
+  const sliderNativeGesture = Gesture.Native();
   
   // Gesture handling for pan and zoom
   const scale = useSharedValue(1);
@@ -226,37 +303,35 @@ export default function IntegratedColoringBookApp({
     loadDefaultTemplate();
   }, []);
 
-  // Pinch gesture handler for zooming (web only to avoid Android lag)
-  const pinchHandler = useAnimatedGestureHandler({
-    onStart: (_, context: any) => {
-      context.startScale = scale.value;
-    },
-    onActive: (event: any, context: any) => {
+  // Pinch gesture for zooming (web only to avoid Android lag)
+  const pinchGesture = Gesture.Pinch()
+    .onStart(() => {
+      // Store initial scale at start
+    })
+    .onUpdate((event) => {
       // Avoid spamming React state during gesture to prevent jank
-      scale.value = context.startScale * event.scale;
-    },
-    onEnd: () => {
+      scale.value = event.scale;
+    })
+    .onEnd(() => {
       const clamped = Math.max(0.5, Math.min(3, scale.value));
       scale.value = withSpring(clamped);
       runOnJS(setZoom)(clamped);
-    },
-  });
+    });
 
-  // Pan gesture handler for dragging when zoomed
-  const panHandler = useAnimatedGestureHandler({
-    onStart: (_, context: any) => {
-      context.startX = translationX.value;
-      context.startY = translationY.value;
-    },
-    onActive: (event: any, context: any) => {
+  // Pan gesture for dragging when zoomed
+  const panGesture = Gesture.Pan()
+    .onStart(() => {
+      // Store initial translation at start
+    })
+    .onUpdate((event) => {
       // Only allow panning when zoomed in or in explicit move mode
       const allow = scale.value > 1 || selectedTool === 'move';
       if (allow) {
-        translationX.value = context.startX + event.translationX;
-        translationY.value = context.startY + event.translationY;
+        translationX.value = event.translationX;
+        translationY.value = event.translationY;
       }
-    },
-    onEnd: () => {
+    })
+    .onEnd(() => {
       // Add boundaries to prevent panning too far. Constrain to container size.
       const scaledW = canvasW.value * scale.value;
       const scaledH = canvasH.value * scale.value;
@@ -270,8 +345,37 @@ export default function IntegratedColoringBookApp({
       translationY.value = withSpring(
         Math.max(-maxY, Math.min(maxY, translationY.value))
       );
-    },
-  });
+    });
+
+  // Combined gestures for web
+  const webCombinedGesture = Gesture.Simultaneous(pinchGesture, panGesture);
+  
+  // Pan gesture for native with dynamic pointer requirements
+  const nativePanGesture = Gesture.Pan()
+    .minPointers(selectedTool === 'move' ? 1 : 2)
+    .onUpdate((event) => {
+      // Only allow panning when zoomed in or in explicit move mode
+      const allow = scale.value > 1 || selectedTool === 'move';
+      if (allow) {
+        translationX.value = event.translationX;
+        translationY.value = event.translationY;
+      }
+    })
+    .onEnd(() => {
+      // Add boundaries to prevent panning too far. Constrain to container size.
+      const scaledW = canvasW.value * scale.value;
+      const scaledH = canvasH.value * scale.value;
+      const containerW = canvasW.value;
+      const containerH = canvasH.value;
+      const maxX = Math.max(0, (scaledW - containerW) / 2);
+      const maxY = Math.max(0, (scaledH - containerH) / 2);
+      translationX.value = withSpring(
+        Math.max(-maxX, Math.min(maxX, translationX.value))
+      );
+      translationY.value = withSpring(
+        Math.max(-maxY, Math.min(maxY, translationY.value))
+      );
+    });
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -498,39 +602,25 @@ export default function IntegratedColoringBookApp({
         {/* Canvas */}
         {currentTemplate?.bitmapUri ? (
           Platform.OS === 'web' ? (
-      <PinchGestureHandler 
-        ref={pinchGestureRef}
-        onGestureEvent={pinchHandler}
-        simultaneousHandlers={[panGestureRef, sliderGestureRef]}
-      >
+            <GestureDetector gesture={webCombinedGesture}>
               <Animated.View style={styles.modernCanvasContainer}>
-                <PanGestureHandler 
-                  ref={panGestureRef}
-                  onGestureEvent={panHandler} 
-                  simultaneousHandlers={[pinchGestureRef, sliderGestureRef]}
-                >
-                  <Animated.View style={[animatedStyle, { flex: 1 }]}>
-                    <WorkingColoringCanvas
-                      ref={bitmapCanvasRef}
-                      selectedColor={selectedColor}
-                      selectedTool={selectedTool === 'move' ? 'brush' : selectedTool}
-                      brushSize={brushSize}
-                      templateUri={currentTemplate.bitmapUri}
-                      interactionEnabled={!showColorTray}
-                    />
-                  </Animated.View>
-                </PanGestureHandler>
+                <Animated.View style={[animatedStyle, { flex: 1 }]}>
+                  <WorkingColoringCanvas
+                    ref={bitmapCanvasRef}
+                    selectedColor={selectedColor}
+                    selectedTool={selectedTool === 'move' ? 'brush' : selectedTool}
+                    brushSize={brushSize}
+                    templateUri={currentTemplate.bitmapUri}
+                    interactionEnabled={!showColorTray}
+                  />
+                </Animated.View>
               </Animated.View>
-            </PinchGestureHandler>
+            </GestureDetector>
           ) : (
             // On native, pan with two fingers to avoid conflicts with drawing; zoom via top bar
             <View ref={captureViewRef as any} style={styles.modernCanvasContainer}>
               {/* One-finger pan when in Move mode; otherwise require two fingers so drawing remains single-finger */}
-              <PanGestureHandler 
-                onGestureEvent={panHandler} 
-                minPointers={selectedTool === 'move' ? 1 : 2} 
-                simultaneousHandlers={[sliderGestureRef]}
-              >
+              <GestureDetector gesture={nativePanGesture}>
                 <Animated.View style={[animatedStyle, { flex: 1 }]}>
                   <NativeZebraCanvas
                     ref={bitmapCanvasRef}
@@ -545,7 +635,7 @@ export default function IntegratedColoringBookApp({
         initialDataUrl={canvasSnapshot ?? undefined}
                   />
                 </Animated.View>
-              </PanGestureHandler>
+              </GestureDetector>
             </View>
           )
         ) : (
@@ -619,7 +709,7 @@ export default function IntegratedColoringBookApp({
                   max={100}
                 />
               ) : (
-                <NativeViewGestureHandler ref={sliderGestureRef}>
+                <GestureDetector gesture={sliderNativeGesture}>
                   <View style={{ flex: 1 }}>
                     <Slider
                       style={styles.sizeSlider}
@@ -634,7 +724,7 @@ export default function IntegratedColoringBookApp({
                       thumbTintColor="#6366f1"
                     />
                   </View>
-                </NativeViewGestureHandler>
+                </GestureDetector>
               )}
 
               {/* Increase size button */}
@@ -826,7 +916,7 @@ export default function IntegratedColoringBookApp({
                 }
                 return rows;
               })()}
-              {/* Compact color picker (wheel disabled on Android to avoid crashes) */}
+              {/* Custom color picker - reliable and crash-free */}
               <View style={styles.wheelContainer}>
                 <View style={{ 
                   backgroundColor: 'white', 
@@ -837,48 +927,11 @@ export default function IntegratedColoringBookApp({
                   shadowOpacity: 0.1,
                   shadowRadius: 4
                 }}>
-                  <ColorPickerErrorBoundary>
-                      {Platform.OS === 'android' ? (
-                        // Safer native picker: use hue and brightness sliders only
-                        <ColorPicker
-                          value={selectedColor}
-                          onComplete={(c: any) => {
-                            try {
-                              if (c && c.hex) {
-                                setSelectedColor(c.hex);
-                              }
-                            } catch (error) {
-                              console.warn('Android Color picker onComplete error:', error);
-                            }
-                          }}
-                          style={{ width: '100%' }}
-                        >
-                          <Preview hideInitialColor hideText style={{ marginBottom: 10 }} />
-                          <HueSlider style={{ marginTop: 12, width: '100%' }} />
-                          <BrightnessSlider style={{ marginTop: 12, marginBottom: 4, width: '100%' }} />
-                        </ColorPicker>
-                      ) : (
-                        <ColorPicker
-                          value={selectedColor}
-                          onComplete={(c: any) => {
-                            try {
-                              if (c && c.hex) {
-                                setSelectedColor(c.hex);
-                              }
-                            } catch (error) {
-                              console.warn('iOS Color picker onComplete error:', error);
-                            }
-                          }}
-                          style={{ width: '100%' }}
-                        >
-                          <Preview hideInitialColor hideText style={{ marginBottom: 10 }} />
-                          <Panel3 style={{ height: screenWidth < 380 ? 150 : 180, borderRadius: 12, width: '100%' }} />
-                          <HueSlider style={{ marginTop: 12, width: '100%' }} />
-                          <BrightnessSlider style={{ marginTop: 12, marginBottom: 4, width: '100%' }} />
-                        </ColorPicker>
-                      )}
-                    </ColorPickerErrorBoundary>
-                  </View>
+                  <CustomColorPicker
+                    selectedColor={selectedColor}
+                    onColorChange={setSelectedColor}
+                  />
+                </View>
               </View>
               <TouchableOpacity style={styles.centerModalClose} onPress={() => setShowColorTray(false)}>
                 <Text style={styles.centerModalCloseText}>Close</Text>
