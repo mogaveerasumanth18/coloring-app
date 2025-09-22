@@ -38,7 +38,7 @@ import ReanimatedAnimated, {
 import { WorkingColoringCanvas } from './WorkingColoringCanvas';
 import { ZebraColoringCanvas } from './ZebraColoringCanvas';
 import { NativeZebraCanvas } from './NativeZebraCanvas';
-import ColorPicker, { Panel1, HueSlider, OpacitySlider, Swatches } from 'reanimated-color-picker';
+import ColorPicker, { Panel1 } from 'reanimated-color-picker';
 // (removed unused reanimated Colors import)
 
 interface FullscreenCanvasProps {
@@ -160,25 +160,25 @@ const CustomColorPicker = ({
         borderColor: '#E2E8F0'
       }} />
 
-      {/* Color Picker with spectrum/wheel */}
+      {/* Single Color Wheel/Spectrum Picker */}
       <ColorPicker 
         value={selectedColor}
         onComplete={(selectedColor) => {
           onColorChange(selectedColor.hex);
         }}
-        sliderThickness={25}
-        thumbSize={24}
+        thumbSize={30}
         thumbShape='circle'
         boundedThumb={true}
         style={{ 
           width: '100%',
-          height: 300,
-          gap: 20
+          height: 250,
         }}
       >
-        <Panel1 style={{ borderRadius: 16, height: 200 }} />
-        <HueSlider style={{ borderRadius: 12, height: 25 }} />
-        <OpacitySlider style={{ borderRadius: 12, height: 25 }} />
+        <Panel1 style={{ 
+          borderRadius: 16, 
+          height: 250,
+          width: '100%'
+        }} />
       </ColorPicker>
     </View>
   );
