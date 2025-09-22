@@ -53,31 +53,44 @@ const CustomColorPicker = ({
   onColorChange: (color: string) => void;
 }) => {
   return (
-    <View style={{ padding: 16 }}>
+    <View style={{ padding: 20 }}>
       {/* Color Preview */}
       <View style={{
         width: '100%',
-        height: 40,
+        height: 50,
         backgroundColor: selectedColor,
-        borderRadius: 8,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: '#E2E8F0'
+        borderRadius: 12,
+        marginBottom: 20,
+        borderWidth: 2,
+        borderColor: '#E2E8F0',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
       }} />
 
-      {/* Wheel Color Picker */}
+      {/* Clean Color Wheel - No Swatches */}
       <View style={{
         width: '100%',
-        height: 200,
+        height: 250,
+        alignItems: 'center',
+        justifyContent: 'center',
       }}>
         <ColorPicker
           color={selectedColor}
           onColorChange={(color: string) => {
             onColorChange(color);
           }}
-          thumbSize={30}
+          thumbSize={35}
+          sliderSize={30}
           noSnap={true}
           row={false}
+          swatches={false}
+          swatchesOnly={false}
+          discrete={false}
+          useNativeDriver={true}
+          useNativeLayout={false}
         />
       </View>
     </View>
