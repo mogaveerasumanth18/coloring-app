@@ -153,9 +153,6 @@ importers:
       react-native-screens:
         specifier: ^4.15.2
         version: 4.15.2(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
-      react-native-slider-color-picker:
-        specifier: ^2.2.6
-        version: 2.2.6(react-native-gesture-handler@2.24.0(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))
       react-native-svg:
         specifier: ~15.11.2
         version: 15.11.2(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
@@ -171,6 +168,9 @@ importers:
       react-native-webview:
         specifier: ^13.16.0
         version: 13.16.0(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+      react-native-wheel-color-picker:
+        specifier: ^1.3.1
+        version: 1.3.1
       react-query-kit:
         specifier: ^3.3.2
         version: 3.3.2(@tanstack/react-query@5.85.5(react@19.0.0))
@@ -1471,9 +1471,6 @@ packages:
   '@react-native/js-polyfills@0.79.5':
     resolution: {integrity: sha512-a2wsFlIhvd9ZqCD5KPRsbCQmbZi6KxhRN++jrqG0FUTEV5vY7MvjjUqDILwJd2ZBZsf7uiDuClCcKqA+EEdbvw==}
     engines: {node: '>=18'}
-
-  '@react-native/normalize-colors@0.72.0':
-    resolution: {integrity: sha512-285lfdqSXaqKuBbbtP9qL2tDrfxdOFtIMvkKadtleRQkdOxx+uzGvFr82KHmc/sSiMtfXGp7JnFYWVh4sFl7Yw==}
 
   '@react-native/normalize-colors@0.74.88':
     resolution: {integrity: sha512-He5oTwPBxvXrxJ91dZzpxR7P+VYmc9IkJfhuH8zUiU50ckrt+xWNjtVugPdUv4LuVjmZ36Vk2EX8bl1gVn2dVA==}
@@ -2844,9 +2841,6 @@ packages:
     resolution: {integrity: sha512-g7nH6P6dyDioJogAAGprGpCtVImJhpPk/roCzdb3fIh61/s/nPsfR6onyMwkCAR/OlC3yBC0lESvUoQEAssIrw==}
     engines: {node: '>= 0.8'}
 
-  deprecated-react-native-prop-types@4.2.3:
-    resolution: {integrity: sha512-2rLTiMKidIFFYpIVM69UnQKngLqQfL6I11Ch8wGSBftS18FUXda+o2we2950X+1dmbgps28niI3qwyH4eX3Z1g==}
-
   destroy@1.2.0:
     resolution: {integrity: sha512-2sJGJTaXIIaR1w4iJSNoN0hnMY7Gpc/n8D4qSCJw8QqFWXf7cuAgnEHxBpweaVcPevC2l3KpjYCx3NypQQgaJg==}
     engines: {node: '>= 0.8', npm: 1.2.8000 || >= 1.4.16}
@@ -4022,10 +4016,6 @@ packages:
     resolution: {integrity: sha512-541xKlUw6jr/6gGuk92F+mYM5zaFAc5ahphvkqvNe2bQ6gVBkd6bfrmVJ2t4KDAfikAYZyIqTnktX3i6/aQDrQ==}
     engines: {node: '>=16.x'}
     hasBin: true
-
-  immutable@3.8.2:
-    resolution: {integrity: sha512-15gZoQ38eYjEjxkorfbcgBKBL6R7T459OuK+CpcWt7O3KF4uPCx2tD0uFETlUDIyo+1789crbMhTvQBSR5yBMg==}
-    engines: {node: '>=0.10.0'}
 
   import-fresh@2.0.0:
     resolution: {integrity: sha512-eZ5H8rcgYazHbKC3PG4ClHNykCSxtAhxSSEM+2mb+7evD2CKF5V7c0dNum7AdpDh0ZdICwZY9sRSn8f+KH96sg==}
@@ -5651,6 +5641,9 @@ packages:
       react: 19.0.0
       react-native: '*'
 
+  react-native-elevation@1.0.0:
+    resolution: {integrity: sha512-BWIKcEYtzjRV6GpkX0Km5/w2E7fgIcywiQOT7JZTc5NSbv/YI9kpFinB9lRFsOoRVGmiqq/O3VfP/oH2clIiBA==}
+
   react-native-flash-message@0.4.2:
     resolution: {integrity: sha512-YvdXRW9AGMTI99S3DJZhLO0mbk/ehKv/UQf4/Df+3dtGi8DlkidRbyqCQZk1WMtZ7rN85PMTGr/xEI9CF9z0YA==}
     peerDependencies:
@@ -5725,14 +5718,6 @@ packages:
       react: 19.0.0
       react-native: '*'
 
-  react-native-slider-color-picker@2.2.6:
-    resolution: {integrity: sha512-UULAHs4PU/m3nvuOjV4pltrFQPR3KtQBjxiRUHRCgNM9Hdmy8Z59ezDJuZdENZ85EBvHQpJQ/Jnoplb2059LWg==}
-
-  react-native-smooth-slider@1.3.9:
-    resolution: {integrity: sha512-B1MhR+ptgr0Z2Aw1al74mtjxPLKAPq1+78uTHyMyaBm25A/WhLttwW7En6YflHJGr8Z7/oxM9lL2OFxBQZSfxw==}
-    peerDependencies:
-      react-native-gesture-handler: '>=1.1.0'
-
   react-native-svg-transformer@1.5.1:
     resolution: {integrity: sha512-dFvBNR8A9VPum9KCfh+LE49YiJEF8zUSnEFciKQroR/bEOhlPoZA0SuQ0qNk7m2iZl2w59FYjdRe0pMHWMDl0Q==}
     peerDependencies:
@@ -5762,6 +5747,9 @@ packages:
     peerDependencies:
       react: 19.0.0
       react-native: '*'
+
+  react-native-wheel-color-picker@1.3.1:
+    resolution: {integrity: sha512-ojuajzwEkgIHa4Iw94K9FlwA1iifslMo+HDrOFQMBTMCXm1HaFhtQpDZ5upV9y8vujviDko3hDkVqB7/eV0dzg==}
 
   react-native@0.79.5:
     resolution: {integrity: sha512-jVihwsE4mWEHZ9HkO1J2eUZSwHyDByZOqthwnGrVZCh6kTQBCm4v8dicsyDa6p0fpWNE5KicTcpX/XXl0ASJFg==}
@@ -6493,9 +6481,6 @@ packages:
 
   through@2.3.8:
     resolution: {integrity: sha512-w89qg7PI8wAdvX60bMDP+bFoD5Dvhm9oLheFp5O4a2QF0cSBGsBX4qZmadPMvVqlLJBBci+WqGGOAPvcDeNSVg==}
-
-  tinycolor2@1.6.0:
-    resolution: {integrity: sha512-XPaBkWQJdsf3pLKJV9p4qN/S+fm2Oj8AIPo1BTUhg5oxkvm9+SVEGFdhyOz7tTdUTfvxMiAs4sp6/eZO2Ew+pw==}
 
   tinyexec@0.3.1:
     resolution: {integrity: sha512-WiCJLEECkO18gwqIp6+hJg0//p23HXp4S+gGtAKu3mI2F2/sXC4FvHvXvB0zJVVaTPhx1/tOwdbRsa1sOBIKqQ==}
@@ -8992,8 +8977,6 @@ snapshots:
 
   '@react-native/js-polyfills@0.79.5': {}
 
-  '@react-native/normalize-colors@0.72.0': {}
-
   '@react-native/normalize-colors@0.74.88': {}
 
   '@react-native/normalize-colors@0.76.2': {}
@@ -10503,12 +10486,6 @@ snapshots:
   delayed-stream@1.0.0: {}
 
   depd@2.0.0: {}
-
-  deprecated-react-native-prop-types@4.2.3:
-    dependencies:
-      '@react-native/normalize-colors': 0.72.0
-      invariant: 2.2.4
-      prop-types: 15.8.1
 
   destroy@1.2.0: {}
 
@@ -12077,8 +12054,6 @@ snapshots:
   image-size@1.1.1:
     dependencies:
       queue: 6.0.2
-
-  immutable@3.8.2: {}
 
   import-fresh@2.0.0:
     dependencies:
@@ -13962,6 +13937,8 @@ snapshots:
       react: 19.0.0
       react-native: 0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0)
 
+  react-native-elevation@1.0.0: {}
+
   react-native-flash-message@0.4.2(prop-types@15.8.1)(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0):
     dependencies:
       prop-types: 15.8.1
@@ -14046,21 +14023,6 @@ snapshots:
       react-native-is-edge-to-edge: 1.2.1(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
       warn-once: 0.1.1
 
-  react-native-slider-color-picker@2.2.6(react-native-gesture-handler@2.24.0(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)):
-    dependencies:
-      immutable: 3.8.2
-      prop-types: 15.8.1
-      react-native-smooth-slider: 1.3.9(react-native-gesture-handler@2.24.0(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))
-      tinycolor2: 1.6.0
-    transitivePeerDependencies:
-      - react-native-gesture-handler
-
-  react-native-smooth-slider@1.3.9(react-native-gesture-handler@2.24.0(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)):
-    dependencies:
-      deprecated-react-native-prop-types: 4.2.3
-      prop-types: 15.8.1
-      react-native-gesture-handler: 2.24.0(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
-
   react-native-svg-transformer@1.5.1(react-native-svg@15.11.2(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0))(react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0))(typescript@5.8.3):
     dependencies:
       '@svgr/core': 8.1.0(typescript@5.8.3)
@@ -14108,6 +14070,10 @@ snapshots:
       invariant: 2.2.4
       react: 19.0.0
       react-native: 0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0)
+
+  react-native-wheel-color-picker@1.3.1:
+    dependencies:
+      react-native-elevation: 1.0.0
 
   react-native@0.79.5(@babel/core@7.26.0)(@types/react@19.0.14)(react@19.0.0):
     dependencies:
@@ -14968,8 +14934,6 @@ snapshots:
   throat@5.0.0: {}
 
   through@2.3.8: {}
-
-  tinycolor2@1.6.0: {}
 
   tinyexec@0.3.1: {}
 
