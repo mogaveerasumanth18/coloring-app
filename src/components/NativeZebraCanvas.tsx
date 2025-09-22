@@ -1,12 +1,10 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
-  Alert,
   Dimensions,
   PanResponder,
   StyleSheet,
   Text,
   View,
-  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as FileSystem from 'expo-file-system';

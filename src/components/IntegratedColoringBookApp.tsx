@@ -36,6 +36,7 @@ import { ImageUploaderEnhanced } from './ImageUploaderEnhanced';
 import { WorkingColoringCanvas } from './WorkingColoringCanvas';
 import { NativeZebraCanvas } from './NativeZebraCanvas';
 import FullscreenCanvas from './FullscreenCanvas';
+import ColorPicker, { Panel1, HueSlider, OpacitySlider, Swatches } from 'reanimated-color-picker';
 
 const { width: screenWidth } = Dimensions.get('window');
 // UI sizing constants for responsive palette/slider
@@ -43,45 +44,7 @@ const MODAL_SIDE_PADDING = 16;
 const SWATCH_GAP = 12;
 const DEFAULT_SWATCH_SIZE = 44; // will shrink/grow based on width
 
-// Color conversion utilities
-const hsvToRgb = (h: number, s: number, v: number): [number, number, number] => {
-  const c = v * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = v - c;
-
-  let r = 0, g = 0, b = 0;
-
-  if (0 <= h && h < 60) {
-    r = c; g = x; b = 0;
-  } else if (60 <= h && h < 120) {
-    r = x; g = c; b = 0;
-  } else if (120 <= h && h < 180) {
-    r = 0; g = c; b = x;
-  } else if (180 <= h && h < 240) {
-    r = 0; g = x; b = c;
-  } else if (240 <= h && h < 300) {
-    r = x; g = 0; b = c;
-  } else if (300 <= h && h < 360) {
-    r = c; g = 0; b = x;
-  }
-
-  return [
-    Math.round((r + m) * 255),
-    Math.round((g + m) * 255),
-    Math.round((b + m) * 255)
-  ];
-};
-
-const rgbToHex = (r: number, g: number, b: number): string => {
-  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-};
-
-const hsvToHex = (h: number, s: number, v: number): string => {
-  const [r, g, b] = hsvToRgb(h, s, v);
-  return rgbToHex(r, g, b);
-};
-
-// Custom Color Picker Component
+// Custom Color Picker Component using reanimated-color-picker
 const CustomColorPicker = ({ 
   selectedColor, 
   onColorChange 
@@ -89,15 +52,6 @@ const CustomColorPicker = ({
   selectedColor: string; 
   onColorChange: (color: string) => void;
 }) => {
-  const [hue, setHue] = useState(0);
-  const [saturation, setSaturation] = useState(1);
-  const [brightness, setBrightness] = useState(1);
-
-  useEffect(() => {
-    const newColor = hsvToHex(hue, saturation, brightness);
-    onColorChange(newColor);
-  }, [hue, saturation, brightness, onColorChange]);
-
   return (
     <View style={{ padding: 16 }}>
       {/* Color Preview */}
@@ -111,53 +65,26 @@ const CustomColorPicker = ({
         borderColor: '#E2E8F0'
       }} />
 
-      {/* Hue Slider */}
-      <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#1F2937' }}>
-        Hue
-      </Text>
-      <Slider
-        style={{ width: '100%', height: 40 }}
-        minimumValue={0}
-        maximumValue={360}
-        value={hue}
-        step={1}
-        onValueChange={setHue}
-        minimumTrackTintColor="#FF0000"
-        maximumTrackTintColor="#E2E8F0"
-        thumbTintColor="#6366f1"
-      />
-
-      {/* Saturation Slider */}
-      <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8, marginTop: 16, color: '#1F2937' }}>
-        Saturation
-      </Text>
-      <Slider
-        style={{ width: '100%', height: 40 }}
-        minimumValue={0}
-        maximumValue={1}
-        value={saturation}
-        step={0.01}
-        onValueChange={setSaturation}
-        minimumTrackTintColor="#6366f1"
-        maximumTrackTintColor="#E2E8F0"
-        thumbTintColor="#6366f1"
-      />
-
-      {/* Brightness Slider */}
-      <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8, marginTop: 16, color: '#1F2937' }}>
-        Brightness
-      </Text>
-      <Slider
-        style={{ width: '100%', height: 40 }}
-        minimumValue={0}
-        maximumValue={1}
-        value={brightness}
-        step={0.01}
-        onValueChange={setBrightness}
-        minimumTrackTintColor="#6366f1"
-        maximumTrackTintColor="#E2E8F0"
-        thumbTintColor="#6366f1"
-      />
+      {/* Color Picker with spectrum/wheel */}
+      <ColorPicker 
+        value={selectedColor}
+        onComplete={(selectedColor) => {
+          onColorChange(selectedColor.hex);
+        }}
+        sliderThickness={25}
+        thumbSize={24}
+        thumbShape='circle'
+        boundedThumb={true}
+        style={{ 
+          width: '100%',
+          height: 300,
+          gap: 20
+        }}
+      >
+        <Panel1 style={{ borderRadius: 16, height: 200 }} />
+        <HueSlider style={{ borderRadius: 12, height: 25 }} />
+        <OpacitySlider style={{ borderRadius: 12, height: 25 }} />
+      </ColorPicker>
     </View>
   );
 };

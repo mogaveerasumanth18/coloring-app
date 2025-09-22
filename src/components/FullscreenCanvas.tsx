@@ -38,6 +38,7 @@ import ReanimatedAnimated, {
 import { WorkingColoringCanvas } from './WorkingColoringCanvas';
 import { ZebraColoringCanvas } from './ZebraColoringCanvas';
 import { NativeZebraCanvas } from './NativeZebraCanvas';
+import ColorPicker, { Panel1, HueSlider, OpacitySlider, Swatches } from 'reanimated-color-picker';
 // (removed unused reanimated Colors import)
 
 interface FullscreenCanvasProps {
@@ -137,6 +138,51 @@ function tryGetDataUrlSize(uri: string): { width: number; height: number } | nul
   const s2 = tryParseJPEG(prefix);
   return s2;
 }
+
+// Custom Color Picker Component using reanimated-color-picker
+const CustomColorPicker = ({ 
+  selectedColor, 
+  onColorChange 
+}: { 
+  selectedColor: string; 
+  onColorChange: (color: string) => void;
+}) => {
+  return (
+    <View style={{ padding: 16 }}>
+      {/* Color Preview */}
+      <View style={{
+        width: '100%',
+        height: 40,
+        backgroundColor: selectedColor,
+        borderRadius: 8,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#E2E8F0'
+      }} />
+
+      {/* Color Picker with spectrum/wheel */}
+      <ColorPicker 
+        value={selectedColor}
+        onComplete={(selectedColor) => {
+          onColorChange(selectedColor.hex);
+        }}
+        sliderThickness={25}
+        thumbSize={24}
+        thumbShape='circle'
+        boundedThumb={true}
+        style={{ 
+          width: '100%',
+          height: 300,
+          gap: 20
+        }}
+      >
+        <Panel1 style={{ borderRadius: 16, height: 200 }} />
+        <HueSlider style={{ borderRadius: 12, height: 25 }} />
+        <OpacitySlider style={{ borderRadius: 12, height: 25 }} />
+      </ColorPicker>
+    </View>
+  );
+};
 
 export default function FullscreenCanvas({
   isVisible,
@@ -865,22 +911,45 @@ export default function FullscreenCanvas({
       >
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowColorPicker(false)}>
           <View style={styles.colorPickerModal}>
-            <Text style={styles.colorPickerTitle}>Choose a Color</Text>
-            <ScrollView contentContainerStyle={styles.colorGrid} showsVerticalScrollIndicator={false}>
-              {colors.map((color) => (
-                <TouchableOpacity
-                  key={color}
-                  style={[
-                    styles.colorOption,
-                    { backgroundColor: color },
-                    currentColor === color && styles.selectedColorOption,
-                  ]}
-                  onPress={() => {
+            <Text style={styles.colorPickerTitle}>Pick a Color</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Predefined color swatches */}
+              <View style={styles.colorGrid}>
+                {colors.map((color) => (
+                  <TouchableOpacity
+                    key={color}
+                    style={[
+                      styles.colorOption,
+                      { backgroundColor: color },
+                      currentColor === color && styles.selectedColorOption,
+                    ]}
+                    onPress={() => {
+                      setCurrentColor(color);
+                      setShowColorPicker(false);
+                    }}
+                  />
+                ))}
+              </View>
+              
+              {/* Custom color picker with spectrum */}
+              <View style={{ 
+                backgroundColor: 'white', 
+                borderRadius: 12, 
+                padding: 16,
+                marginTop: 16,
+                elevation: 4,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4
+              }}>
+                <CustomColorPicker
+                  selectedColor={currentColor}
+                  onColorChange={(color) => {
                     setCurrentColor(color);
                     setShowColorPicker(false);
                   }}
                 />
-              ))}
+              </View>
             </ScrollView>
           </View>
         </TouchableOpacity>
