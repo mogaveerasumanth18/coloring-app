@@ -38,7 +38,7 @@ import ReanimatedAnimated, {
 import { WorkingColoringCanvas } from './WorkingColoringCanvas';
 import { ZebraColoringCanvas } from './ZebraColoringCanvas';
 import { NativeZebraCanvas } from './NativeZebraCanvas';
-import ColorPicker, { Panel1 } from 'reanimated-color-picker';
+import { ColorPicker } from 'react-native-slider-color-picker';
 // (removed unused reanimated Colors import)
 
 interface FullscreenCanvasProps {
@@ -139,7 +139,7 @@ function tryGetDataUrlSize(uri: string): { width: number; height: number } | nul
   return s2;
 }
 
-// Custom Color Picker Component using reanimated-color-picker
+// Custom Color Picker Component using react-native-slider-color-picker
 const CustomColorPicker = ({ 
   selectedColor, 
   onColorChange 
@@ -160,26 +160,17 @@ const CustomColorPicker = ({
         borderColor: '#E2E8F0'
       }} />
 
-      {/* Single Color Wheel/Spectrum Picker */}
-      <ColorPicker 
-        value={selectedColor}
-        onComplete={(selectedColor) => {
-          onColorChange(selectedColor.hex);
+      {/* Color Picker with Sliders */}
+      <ColorPicker
+        oldColor={selectedColor}
+        onColorChange={(color: any) => {
+          onColorChange(color);
         }}
-        thumbSize={30}
-        thumbShape='circle'
-        boundedThumb={true}
-        style={{ 
+        style={{
           width: '100%',
-          height: 250,
+          height: 200,
         }}
-      >
-        <Panel1 style={{ 
-          borderRadius: 16, 
-          height: 250,
-          width: '100%'
-        }} />
-      </ColorPicker>
+      />
     </View>
   );
 };

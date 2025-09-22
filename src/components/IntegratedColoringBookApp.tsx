@@ -36,7 +36,7 @@ import { ImageUploaderEnhanced } from './ImageUploaderEnhanced';
 import { WorkingColoringCanvas } from './WorkingColoringCanvas';
 import { NativeZebraCanvas } from './NativeZebraCanvas';
 import FullscreenCanvas from './FullscreenCanvas';
-import ColorPicker, { Panel1 } from 'reanimated-color-picker';
+import { ColorPicker } from 'react-native-slider-color-picker';
 
 const { width: screenWidth } = Dimensions.get('window');
 // UI sizing constants for responsive palette/slider
@@ -44,7 +44,7 @@ const MODAL_SIDE_PADDING = 16;
 const SWATCH_GAP = 12;
 const DEFAULT_SWATCH_SIZE = 44; // will shrink/grow based on width
 
-// Custom Color Picker Component using reanimated-color-picker
+// Custom Color Picker Component using react-native-slider-color-picker
 const CustomColorPicker = ({ 
   selectedColor, 
   onColorChange 
@@ -65,26 +65,17 @@ const CustomColorPicker = ({
         borderColor: '#E2E8F0'
       }} />
 
-      {/* Single Color Wheel/Spectrum Picker */}
-      <ColorPicker 
-        value={selectedColor}
-        onComplete={(selectedColor) => {
-          onColorChange(selectedColor.hex);
+      {/* Color Picker with Sliders */}
+      <ColorPicker
+        oldColor={selectedColor}
+        onColorChange={(color: any) => {
+          onColorChange(color);
         }}
-        thumbSize={30}
-        thumbShape='circle'
-        boundedThumb={true}
-        style={{ 
+        style={{
           width: '100%',
-          height: 250,
+          height: 200,
         }}
-      >
-        <Panel1 style={{ 
-          borderRadius: 16, 
-          height: 250,
-          width: '100%'
-        }} />
-      </ColorPicker>
+      />
     </View>
   );
 };
