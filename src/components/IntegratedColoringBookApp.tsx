@@ -805,7 +805,7 @@ export default function IntegratedColoringBookApp({
 
       {/* Color tray modal */}
       {showColorTray && (
-        <View style={[styles.colorTrayOverlay, styles.centerOverlay]}>
+        <View style={[styles.colorTrayOverlay, styles.centerOverlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           <TouchableOpacity style={styles.colorTrayBackdrop} activeOpacity={1} onPress={() => setShowColorTray(false)} />
           <View style={styles.centerModal}>
             <ScrollView
@@ -1719,10 +1719,12 @@ const styles = StyleSheet.create({
   centerModal: {
     alignSelf: 'center',
     width: Math.min(screenWidth - 40, 360),
+    maxHeight: '85%',
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     paddingVertical: 16,
     paddingHorizontal: 16,
+    margin: 20,
     elevation: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },

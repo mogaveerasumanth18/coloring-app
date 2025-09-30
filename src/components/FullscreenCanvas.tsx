@@ -553,8 +553,7 @@ export default function FullscreenCanvas({
         <TouchableOpacity
           style={[
             styles.canvasSection,
-            // In Full mode avoid extra padding to prevent black bands; only pad in Compact.
-            uiVisible && uiMode === 'compact' ? styles.canvasSectionPaddedCompact : null,
+            // Remove padding to prevent canvas shrinking - tools will be positioned absolutely
           ]}
           onPress={() => {
             if (!uiVisible) {
@@ -849,7 +848,7 @@ export default function FullscreenCanvas({
                 {
                   opacity: fabAnim,
                   transform: [
-                    { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -112] }) },
+                    { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -84] }) }, // Reduced from -112
                     { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
                   ],
                 },
@@ -867,8 +866,8 @@ export default function FullscreenCanvas({
                 {
                   opacity: fabAnim,
                   transform: [
-                    { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -88] }) },
-                    { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -88] }) },
+                    { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -68] }) }, // Reduced from -88
+                    { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -68] }) }, // Reduced from -88
                     { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
                   ],
                 },
@@ -886,7 +885,7 @@ export default function FullscreenCanvas({
                 {
                   opacity: fabAnim,
                   transform: [
-                    { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -120] }) },
+                    { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -96] }) }, // Reduced from -120
                     { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
                   ],
                 },
@@ -1317,9 +1316,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 16,
-    margin: 16,
-    maxHeight: 460,
+    margin: 20,
+    maxHeight: '85%',
     minWidth: 320,
+    maxWidth: '90%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
