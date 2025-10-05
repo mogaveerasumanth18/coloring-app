@@ -45,22 +45,22 @@ const SWATCH_GAP = 12;
 const DEFAULT_SWATCH_SIZE = 44; // will shrink/grow based on width
 
 // Custom Color Picker Component using react-native-wheel-color-picker
-const CustomColorPicker = ({ 
-  selectedColor, 
-  onColorChange 
-}: { 
-  selectedColor: string; 
+const CustomColorPicker = ({
+  selectedColor,
+  onColorChange
+}: {
+  selectedColor: string;
   onColorChange: (color: string) => void;
 }) => {
   return (
-    <View style={{ padding: 20 }}>
+    <View style={{ padding: 16 }}>
       {/* Color Preview */}
       <View style={{
         width: '100%',
         height: 50,
         backgroundColor: selectedColor,
         borderRadius: 12,
-        marginBottom: 20,
+        marginBottom: 16,
         borderWidth: 2,
         borderColor: '#E2E8F0',
         shadowColor: '#000',
@@ -70,20 +70,21 @@ const CustomColorPicker = ({
         elevation: 2,
       }} />
 
-      {/* Clean Color Wheel - No Swatches */}
+      {/* Clean Color Wheel - Only the wheel, no slider or extra elements */}
       <View style={{
         width: '100%',
-        height: 250,
+        height: 220,
         alignItems: 'center',
         justifyContent: 'center',
+        overflow: 'hidden',
       }}>
         <ColorPicker
           color={selectedColor}
           onColorChange={(color: string) => {
             onColorChange(color);
           }}
-          thumbSize={35}
-          sliderSize={30}
+          thumbSize={30}
+          sliderSize={0}
           noSnap={true}
           row={false}
           swatches={false}
@@ -91,6 +92,8 @@ const CustomColorPicker = ({
           discrete={false}
           useNativeDriver={true}
           useNativeLayout={false}
+          gapSize={0}
+          autoResetSlider={false}
         />
       </View>
     </View>
@@ -187,10 +190,10 @@ export default function IntegratedColoringBookApp({
   // Gesture/refs helpers (keeping refs for compatibility)
   const panGestureRef = useRef<any>(null);
   const pinchGestureRef = useRef<any>(null);
-  
+
   // Native gesture for slider
   const sliderNativeGesture = Gesture.Native();
-  
+
   // Gesture handling for pan and zoom
   const scale = useSharedValue(1);
   const translationX = useSharedValue(0);
@@ -284,7 +287,7 @@ export default function IntegratedColoringBookApp({
 
   // Combined gestures for web
   const webCombinedGesture = Gesture.Simultaneous(pinchGesture, panGesture);
-  
+
   // Pan gesture for native with dynamic pointer requirements
   const nativePanGesture = Gesture.Pan()
     .minPointers(selectedTool === 'move' ? 1 : 2)
@@ -400,13 +403,13 @@ export default function IntegratedColoringBookApp({
         (d.exitFullscreen || d.webkitExitFullscreen)?.call(d);
         setIsFullscreen(false);
       }
-    } catch {}
+    } catch { }
   };
 
   const handleExpandFullscreen = async () => {
     // First, try to capture current canvas state if available
     let currentCanvasData: string | null = null;
-    
+
     // Check if we have a canvas and try to get its current data
     if (bitmapCanvasRef.current && typeof bitmapCanvasRef.current.getCurrentDataUrl === 'function') {
       try {
@@ -416,13 +419,13 @@ export default function IntegratedColoringBookApp({
         console.warn('Could not capture canvas state:', error);
       }
     }
-    
+
     // Use current canvas data if available, otherwise fall back to stored snapshot
     const dataToUse = currentCanvasData || canvasSnapshot;
-    
+
     // If we have existing progress, check if it's different from original template
     const hasProgress = dataToUse && dataToUse !== currentTemplate?.bitmapUri && dataToUse.length > 100; // Basic check for actual data
-    
+
     if (hasProgress) {
       Alert.alert(
         'Switch to Fullscreen',
@@ -440,7 +443,7 @@ export default function IntegratedColoringBookApp({
       );
       return;
     }
-    
+
     // If no significant progress, proceed directly
     proceedToFullscreen(dataToUse);
   };
@@ -448,7 +451,7 @@ export default function IntegratedColoringBookApp({
   const proceedToFullscreen = async (canvasData: string | null) => {
     // Update the canvas data to pass to fullscreen
     setCanvasSnapshot(canvasData);
-    
+
     if (Platform.OS === 'web') {
       toggleFullscreenWeb();
     } else {
@@ -481,7 +484,7 @@ export default function IntegratedColoringBookApp({
       );
       return;
     }
-  setCurrentTemplate({
+    setCurrentTemplate({
       svgData: null,
       fileName,
       bitmapUri,
@@ -489,8 +492,8 @@ export default function IntegratedColoringBookApp({
       height: 480,
       type: 'png',
     });
-  // New template => clear previous snapshot
-  setCanvasSnapshot(null);
+    // New template => clear previous snapshot
+    setCanvasSnapshot(null);
     setActiveTab('color');
   };
 
@@ -508,8 +511,8 @@ export default function IntegratedColoringBookApp({
             <Text style={styles.modernAppTitle}>ColorSplash Kids</Text>
             <Text style={styles.modernAppSubtitle}>Let's create colorful magic!</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.headerSaveButton} 
+          <TouchableOpacity
+            style={styles.headerSaveButton}
             onPress={Platform.OS === 'web' ? () => bitmapCanvasRef.current?.save?.() : handleSaveNative}
           >
             <Feather name="save" size={24} color="#FFFFFF" />
@@ -519,9 +522,9 @@ export default function IntegratedColoringBookApp({
 
       {/* Canvas Area - Maximized (70-80% of screen) */}
       <View style={styles.canvasArea}>
-  {/* Removed status label per UX request */}
+        {/* Removed status label per UX request */}
 
-  {/* Zoom controls - moved above canvas as a horizontal bar */}
+        {/* Zoom controls - moved above canvas as a horizontal bar */}
         <View style={styles.topZoomBar}>
           <TouchableOpacity style={styles.topZoomBtn} onPress={handleZoomOut}>
             <Feather name="minus" size={18} color="#1F2937" />
@@ -563,11 +566,11 @@ export default function IntegratedColoringBookApp({
                     selectedColor={selectedColor}
                     selectedTool={selectedTool === 'move' ? 'brush' : selectedTool}
                     brushWidth={brushSize}
-        onColoringComplete={(uri: string) => setCanvasSnapshot(uri)}
+                    onColoringComplete={(uri: string) => setCanvasSnapshot(uri)}
                     width={screenWidth - 32}
                     height={(screenWidth - 32) * 0.8}
                     interactionEnabled={selectedTool !== 'move' && !showColorTray}
-        initialDataUrl={canvasSnapshot ?? undefined}
+                    initialDataUrl={canvasSnapshot ?? undefined}
                   />
                 </Animated.View>
               </GestureDetector>
@@ -585,7 +588,7 @@ export default function IntegratedColoringBookApp({
       {/* Bottom Toolbar - Fixed at bottom (20% of screen) */}
       <View style={[styles.bottomToolbar, { paddingBottom: insets.bottom + 16 }]}>
         {/* Tools Section - Top row */}
-    <View style={styles.toolsRow}>
+        <View style={styles.toolsRow}>
           {/* Eraser replaces Pen */}
           <TouchableOpacity
             style={[styles.toolButton, selectedTool === 'eraser' && styles.activeToolButton]}
@@ -602,13 +605,13 @@ export default function IntegratedColoringBookApp({
             <MaterialIcons name="brush" size={24} color={selectedTool === 'brush' ? '#FFFFFF' : '#64748B'} />
             <Text style={[styles.toolLabel, selectedTool === 'brush' && styles.activeToolLabel]}>Brush</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.toolButton, selectedTool === 'bucket' && styles.activeToolButton]}
             onPress={() => setSelectedTool('bucket')}
           >
             <MaterialIcons name="format-color-fill" size={24} color={selectedTool === 'bucket' ? '#FFFFFF' : '#64748B'} />
-      <Text style={[styles.toolLabel, selectedTool === 'bucket' && styles.activeToolLabel]}>Fill</Text>
+            <Text style={[styles.toolLabel, selectedTool === 'bucket' && styles.activeToolLabel]}>Fill</Text>
           </TouchableOpacity>
 
           {/* Move tool button to enable one-finger panning of zoomed canvas */}
@@ -644,22 +647,20 @@ export default function IntegratedColoringBookApp({
                   max={100}
                 />
               ) : (
-                <GestureDetector gesture={sliderNativeGesture}>
-                  <View style={{ flex: 1 }}>
-                    <Slider
-                      style={styles.sizeSlider}
-                      minimumValue={5}
-                      maximumValue={100}
-                      value={brushSize}
-                      step={1}
-                      onValueChange={(v: number) => setBrushSize(Math.round(v))}
-                      onSlidingComplete={(v: number) => setBrushSize(Math.round(v))}
-                      minimumTrackTintColor="#6366f1"
-                      maximumTrackTintColor="#E2E8F0"
-                      thumbTintColor="#6366f1"
-                    />
-                  </View>
-                </GestureDetector>
+                <View style={{ flex: 1 }}>
+                  <Slider
+                    style={styles.sizeSlider}
+                    minimumValue={5}
+                    maximumValue={100}
+                    value={brushSize}
+                    step={1}
+                    onValueChange={(v: number) => setBrushSize(Math.round(v))}
+                    onSlidingComplete={(v: number) => setBrushSize(Math.round(v))}
+                    minimumTrackTintColor="#6366f1"
+                    maximumTrackTintColor="#E2E8F0"
+                    thumbTintColor="#6366f1"
+                  />
+                </View>
               )}
 
               {/* Increase size button */}
@@ -689,7 +690,7 @@ export default function IntegratedColoringBookApp({
         )}
 
         {/* Actions Section - Middle row */}
-    <View style={styles.actionsRow}>
+        <View style={styles.actionsRow}>
           <TouchableOpacity style={styles.modernActionButton} onPress={() => bitmapCanvasRef.current?.undo?.()}>
             <Ionicons name="arrow-undo" size={20} color="#FFFFFF" />
           </TouchableOpacity>
@@ -698,7 +699,7 @@ export default function IntegratedColoringBookApp({
           </TouchableOpacity>
           {/* Move toggle button */}
           <TouchableOpacity
-      style={[styles.modernActionButton, selectedTool === 'move' && { backgroundColor: '#10b981' }]}
+            style={[styles.modernActionButton, selectedTool === 'move' && { backgroundColor: '#10b981' }]}
             onPress={() => setSelectedTool(selectedTool === 'move' ? 'brush' : 'move')}
             accessibilityLabel="Move"
           >
@@ -710,9 +711,9 @@ export default function IntegratedColoringBookApp({
         </View>
 
         {/* Colors Section - Scrollable row */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
           style={styles.colorsScrollView}
           contentContainerStyle={styles.colorsContainer}
         >
@@ -793,7 +794,7 @@ export default function IntegratedColoringBookApp({
         selectedColor={selectedColor}
         selectedTool={selectedTool as 'brush' | 'bucket' | 'eraser' | 'move'}
         brushSize={brushSize}
-        onColoringChange={() => {}}
+        onColoringChange={() => { }}
         onColoringComplete={(dataUrl?: string) => {
           // Update our canvas snapshot when fullscreen canvas changes
           if (dataUrl) {
@@ -853,9 +854,9 @@ export default function IntegratedColoringBookApp({
               })()}
               {/* Custom color picker - reliable and crash-free */}
               <View style={styles.wheelContainer}>
-                <View style={{ 
-                  backgroundColor: 'white', 
-                  borderRadius: 12, 
+                <View style={{
+                  backgroundColor: 'white',
+                  borderRadius: 12,
                   padding: 16,
                   elevation: 4,
                   shadowOffset: { width: 0, height: 2 },
@@ -930,10 +931,10 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   floatingStatus: {
-  display: 'none',
+    display: 'none',
   },
   statusText: {
-  display: 'none',
+    display: 'none',
   },
   floatingZoomControls: {
     position: 'absolute',
@@ -973,7 +974,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 4,
-  overflow: 'hidden',
+    overflow: 'hidden',
   },
   modernEmptyCanvas: {
     flex: 1,
@@ -1024,7 +1025,7 @@ const styles = StyleSheet.create({
   bottomToolbar: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 12, // Reduced from 16 to 12
-  paddingTop: 16,
+    paddingTop: 16,
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
     shadowColor: '#000',
@@ -1032,9 +1033,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
-  // Extra bottom space to avoid Android system bars overlap
-  paddingBottom: 20,
-  maxHeight: '38%',
+    // Extra bottom space to avoid Android system bars overlap
+    paddingBottom: 20,
+    maxHeight: '38%',
   },
   toolsRow: {
     flexDirection: 'row',
@@ -1098,14 +1099,14 @@ const styles = StyleSheet.create({
     height: 40,
   },
   actionsRow: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  gap: 8,
-  marginBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 16,
   },
   modernActionButton: {
-  width: 44,
-  height: 44,
+    width: 44,
+    height: 44,
     borderRadius: 24,
     backgroundColor: '#8b5cf6',
     justifyContent: 'center',
@@ -1149,13 +1150,13 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   footerButtonsRow: {
-  display: 'none',
+    display: 'none',
   },
   footerButton: {
-  display: 'none',
+    display: 'none',
   },
   footerButtonText: {
-  display: 'none',
+    display: 'none',
   },
   gradientBackground: {
     flex: 1,

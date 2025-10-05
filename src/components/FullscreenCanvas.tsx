@@ -147,14 +147,14 @@ const CustomColorPicker = ({
   onColorChange: (color: string) => void;
 }) => {
   return (
-    <View style={{ padding: 20 }}>
+    <View style={{ padding: 16 }}>
       {/* Color Preview */}
       <View style={{
         width: '100%',
         height: 50,
         backgroundColor: selectedColor,
         borderRadius: 12,
-        marginBottom: 20,
+        marginBottom: 16,
         borderWidth: 2,
         borderColor: '#E2E8F0',
         shadowColor: '#000',
@@ -164,20 +164,21 @@ const CustomColorPicker = ({
         elevation: 2,
       }} />
 
-      {/* Clean Color Wheel - No Swatches */}
+      {/* Clean Color Wheel - Only the wheel, no slider or extra elements */}
       <View style={{
         width: '100%',
-        height: 250,
+        height: 220,
         alignItems: 'center',
         justifyContent: 'center',
+        overflow: 'hidden',
       }}>
         <ColorPicker
           color={selectedColor}
           onColorChange={(color: string) => {
             onColorChange(color);
           }}
-          thumbSize={35}
-          sliderSize={30}
+          thumbSize={30}
+          sliderSize={0}
           noSnap={true}
           row={false}
           swatches={false}
@@ -185,6 +186,8 @@ const CustomColorPicker = ({
           discrete={false}
           useNativeDriver={true}
           useNativeLayout={false}
+          gapSize={0}
+          autoResetSlider={false}
         />
       </View>
     </View>
@@ -270,7 +273,7 @@ export default function FullscreenCanvas({
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     },
-  });
+  }, [currentTool]); // Add dependency to reduce re-creation
 
   const pinchHandler = useAnimatedGestureHandler({
     onStart: (event: any) => {
@@ -284,16 +287,9 @@ export default function FullscreenCanvas({
       const newScale = savedScale.value * event.scale;
       const clampedScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newScale));
 
-      if (clampedScale !== scale.value) {
-        // Calculate focal point adjustment
-        const scaleDiff = clampedScale - savedScale.value;
-        const adjustX = (focalX.value - savedTranslateX.value) * (scaleDiff / savedScale.value);
-        const adjustY = (focalY.value - savedTranslateY.value) * (scaleDiff / savedScale.value);
-
+      // Reduce frequency of updates to improve performance
+      if (Math.abs(clampedScale - scale.value) > 0.01) {
         scale.value = clampedScale;
-        translateX.value = savedTranslateX.value - adjustX;
-        translateY.value = savedTranslateY.value - adjustY;
-
         runOnJS(updateZoom)(clampedScale);
       }
     },
@@ -302,7 +298,7 @@ export default function FullscreenCanvas({
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     },
-  });
+  }, [MIN_ZOOM, MAX_ZOOM]); // Add dependencies to reduce re-creation
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -317,8 +313,8 @@ export default function FullscreenCanvas({
   useEffect(() => {
     Animated.timing(fabAnim, {
       toValue: fabOpen ? 1 : 0,
-      duration: 160,
-      easing: Easing.out(Easing.quad),
+      duration: 120, // Reduced duration for snappier animation
+      easing: Easing.out(Easing.ease), // Simpler easing
       useNativeDriver: true,
     }).start();
   }, [fabOpen, fabAnim]);
@@ -327,8 +323,8 @@ export default function FullscreenCanvas({
   useEffect(() => {
     Animated.timing(uiOpacityAnim, {
       toValue: uiVisible ? 1 : 0,
-      duration: 200,
-      easing: Easing.inOut(Easing.ease),
+      duration: 150, // Reduced duration for snappier animation
+      easing: Easing.ease, // Simpler easing
       useNativeDriver: true,
     }).start();
   }, [uiVisible, uiOpacityAnim]);
@@ -634,9 +630,9 @@ export default function FullscreenCanvas({
               styles.topActionsContainer,
               {
                 opacity: uiOpacityAnim,
-                top: Math.max(16, 20 + (insets?.top ?? 0)), // Reduced top padding
-                left: Math.max(12, 16 + (insets?.left ?? 0)), // Reduced left padding
-                right: Math.max(12, 16 + (insets?.right ?? 0)), // Reduced right padding
+                top: Math.max(8, 12 + (insets?.top ?? 0)), // Further reduced top padding
+                left: Math.max(8, 12 + (insets?.left ?? 0)), // Further reduced left padding
+                right: Math.max(8, 12 + (insets?.right ?? 0)), // Further reduced right padding
               }
             ]}
             pointerEvents={uiVisible ? 'auto' : 'none'}
@@ -722,8 +718,8 @@ export default function FullscreenCanvas({
                     inputRange: [0, 1],
                     outputRange: [1, 0], // Inverse of UI visibility
                   }),
-                  top: Math.max(16, 20 + (insets?.top ?? 0)), // Reduced top padding
-                  right: Math.max(12, 16 + (insets?.right ?? 0)), // Reduced right padding
+                  top: Math.max(8, 12 + (insets?.top ?? 0)), // Further reduced top padding
+                  right: Math.max(8, 12 + (insets?.right ?? 0)), // Further reduced right padding
                 }
               ]}
             >
@@ -746,9 +742,9 @@ export default function FullscreenCanvas({
               style={[
                 styles.toolsHandleContainer,
                 {
-                  bottom: Math.max(24, 32 + (insets?.bottom ?? 0)), // Reduced padding to match FAB
-                  left: Math.max(16, 20 + (insets?.left ?? 0)),
-                  right: Math.max(80, 88 + (insets?.right ?? 0)), // Increased right margin to avoid FAB overlap
+                  bottom: Math.max(16, 20 + (insets?.bottom ?? 0)), // Further reduced padding
+                  left: Math.max(8, 12 + (insets?.left ?? 0)), // Reduced left padding
+                  right: Math.max(100, 108 + (insets?.right ?? 0)), // Increased right margin to avoid FAB overlap
                 }
               ]}
               pointerEvents={'auto'}
@@ -765,28 +761,28 @@ export default function FullscreenCanvas({
                       style={[styles.toolChip, currentTool === 'brush' && styles.toolChipActive]}
                       onPress={() => setCurrentTool('brush')}
                     >
-                      <MaterialIcons name="brush" size={18} color="#ffffff" />
+                      <MaterialIcons name="brush" size={16} color="#ffffff" />
                       <Text style={styles.toolChipText}>Paint</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.toolChip, currentTool === 'bucket' && styles.toolChipActive]}
                       onPress={() => setCurrentTool('bucket')}
                     >
-                      <MaterialIcons name="format-color-fill" size={18} color="#ffffff" />
+                      <MaterialIcons name="format-color-fill" size={16} color="#ffffff" />
                       <Text style={styles.toolChipText}>Fill</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.toolChip, currentTool === 'eraser' && styles.toolChipActive]}
                       onPress={() => setCurrentTool('eraser')}
                     >
-                      <MaterialIcons name="auto-fix-off" size={18} color="#ffffff" />
-                      <Text style={styles.toolChipText}>Eraser</Text>
+                      <MaterialIcons name="auto-fix-off" size={16} color="#ffffff" />
+                      <Text style={styles.toolChipText}>Erase</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.toolChip, currentTool === 'move' && styles.toolChipActive]}
                       onPress={() => setCurrentTool('move')}
                     >
-                      <Feather name="move" size={18} color="#ffffff" />
+                      <Feather name="move" size={16} color="#ffffff" />
                       <Text style={styles.toolChipText}>Move</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.toolChip} onPress={() => setShowColorPicker(true)}>
@@ -795,31 +791,33 @@ export default function FullscreenCanvas({
                     </TouchableOpacity>
                   </View>
                   <View style={styles.toolsRow}>
-                    <Text style={styles.sizeLabel}>Size: {Math.round(currentBrushSize)}px</Text>
-                    <Slider
-                      key={`slider-${currentBrushSize}`}
-                      style={styles.sizeSlider}
-                      minimumValue={2}
-                      maximumValue={50}
-                      value={currentBrushSize}
-                      step={1}
-                      onSlidingStart={keepUiVisible}
-                      onValueChange={(v: number) => {
-                        keepUiVisible();
-                        setCurrentBrushSize(v);
-                      }}
-                      onSlidingComplete={(v: number) => {
-                        keepUiVisible();
-                        setCurrentBrushSize(v);
-                      }}
-                      minimumTrackTintColor="#6366f1"
-                      maximumTrackTintColor="#CBD5E1"
-                      thumbTintColor="#6366f1"
-                      accessibilityLabel="Brush size"
-                      pointerEvents="auto"
-                    />
+                    <Text style={styles.sizeLabel}>Size: {Math.round(currentBrushSize)}</Text>
+                    <View style={styles.sliderContainer}>
+                      <Slider
+                        key={`slider-${currentBrushSize}`}
+                        style={styles.sizeSlider}
+                        minimumValue={2}
+                        maximumValue={50}
+                        value={currentBrushSize}
+                        step={1}
+                        onSlidingStart={keepUiVisible}
+                        onValueChange={(v: number) => {
+                          keepUiVisible();
+                          setCurrentBrushSize(v);
+                        }}
+                        onSlidingComplete={(v: number) => {
+                          keepUiVisible();
+                          setCurrentBrushSize(v);
+                        }}
+                        minimumTrackTintColor="#6366f1"
+                        maximumTrackTintColor="#CBD5E1"
+                        thumbTintColor="#6366f1"
+                        accessibilityLabel="Brush size"
+                        pointerEvents="auto"
+                      />
+                    </View>
                     <TouchableOpacity style={styles.toolsCollapse} onPress={() => setToolsVisible(false)}>
-                      <Feather name="chevron-down" size={16} color="#111827" />
+                      <Feather name="chevron-down" size={14} color="#111827" />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -833,8 +831,8 @@ export default function FullscreenCanvas({
               styles.fabContainer,
               {
                 opacity: uiVisible || fabOpen ? uiOpacityAnim : 0,
-                bottom: Math.max(24, 32 + (insets?.bottom ?? 0)), // Reduced bottom padding
-                right: Math.max(16, 24 + (insets?.right ?? 0)), // Reduced right padding and moved left
+                bottom: Math.max(16, 20 + (insets?.bottom ?? 0)), // Further reduced bottom padding
+                right: Math.max(12, 16 + (insets?.right ?? 0)), // Further reduced right padding
               },
             ]}
             pointerEvents={uiVisible || fabOpen ? 'auto' : 'none'}
@@ -1021,17 +1019,17 @@ const styles = StyleSheet.create({
   // Top toolbar
   topActionsContainer: {
     position: 'absolute',
-    top: 16, // Reduced default top padding
-    left: 12, // Reduced default left padding
-    right: 12, // Reduced default right padding
+    top: 8, // Further reduced default top padding
+    left: 8, // Further reduced default left padding
+    right: 8, // Further reduced default right padding
     zIndex: 10,
-    gap: 8, // Reduced gap
+    gap: 4, // Further reduced gap
   },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6, // Further reduced gap to prevent overflow
-    flexWrap: 'wrap',
+    gap: 4, // Further reduced gap to prevent overflow
+    flexWrap: 'nowrap', // Prevent wrapping to keep buttons in single row
     justifyContent: 'flex-start', // Better alignment on mobile
   },
   actionButton: {
@@ -1050,19 +1048,19 @@ const styles = StyleSheet.create({
   },
   smallActionButton: {
     backgroundColor: '#6366f1',
-    borderRadius: 14, // Further reduced radius
-    paddingHorizontal: 6, // Further reduced padding
-    paddingVertical: 4, // Further reduced padding
+    borderRadius: 12, // Further reduced radius
+    paddingHorizontal: 4, // Further reduced padding
+    paddingVertical: 3, // Further reduced padding
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2, // Further reduced gap
+    gap: 1, // Further reduced gap
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-    minWidth: 32, // Reduced minimum touch target
-    minHeight: 32, // Reduced minimum touch target
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+    minWidth: 28, // Further reduced minimum touch target
+    minHeight: 28, // Further reduced minimum touch target
   },
   activeActionButton: {
     backgroundColor: '#4f46e5',
@@ -1075,10 +1073,10 @@ const styles = StyleSheet.create({
   },
   zoomIndicator: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 10, // Further reduced radius
-    paddingHorizontal: 6, // Further reduced padding
-    paddingVertical: 4, // Further reduced padding
-    minWidth: 44, // Reduced minimum width
+    borderRadius: 8, // Further reduced radius
+    paddingHorizontal: 4, // Further reduced padding
+    paddingVertical: 2, // Further reduced padding
+    minWidth: 36, // Further reduced minimum width
   },
   zoomText: {
     color: '#1f2937',
@@ -1099,8 +1097,9 @@ const styles = StyleSheet.create({
   },
   sizeLabel: {
     color: '#1f2937',
-    fontSize: 12,
+    fontSize: 10, // Reduced font size
     fontWeight: '600',
+    minWidth: 50, // Ensure consistent width
   },
   sizeIndicator: {
     width: 24,
@@ -1146,9 +1145,9 @@ const styles = StyleSheet.create({
   // Collapsible Tools panel
   toolsHandleContainer: {
     position: 'absolute',
-    bottom: 24, // Will be overridden with safe area insets
-    left: 16, // Will be overridden with safe area insets
-    right: 80, // Increased to avoid FAB overlap
+    bottom: 16, // Further reduced default bottom padding
+    left: 8, // Further reduced default left padding
+    right: 100, // Further increased to avoid FAB overlap
     alignItems: 'center',
     zIndex: 12,
   },
@@ -1173,50 +1172,59 @@ const styles = StyleSheet.create({
   },
   toolsPanel: {
     backgroundColor: 'rgba(255,255,255,0.98)',
-    borderRadius: 16,
-    padding: 10, // Reduced padding
-    marginHorizontal: 4, // Further reduced margin to prevent overflow
+    borderRadius: 12, // Reduced border radius
+    padding: 8, // Further reduced padding
+    marginHorizontal: 0, // Remove horizontal margin to maximize space
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+    maxWidth: '100%', // Ensure it doesn't exceed container width
   },
   toolsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8, // Reduced from 10 for mobile
-    marginVertical: 4,
-    flexWrap: 'wrap', // Allow wrapping on small screens
+    gap: 4, // Further reduced gap
+    marginVertical: 2, // Reduced vertical margin
+    flexWrap: 'nowrap', // Prevent wrapping to keep tools in single row
   },
   toolChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4, // Reduced gap
+    gap: 2, // Further reduced gap
     backgroundColor: '#9ca3af',
-    borderRadius: 14, // Smaller radius
-    paddingHorizontal: 8, // Reduced padding
-    paddingVertical: 6, // Reduced padding
-    minHeight: 32, // Ensure minimum touch target
+    borderRadius: 10, // Further reduced radius
+    paddingHorizontal: 6, // Further reduced padding
+    paddingVertical: 4, // Further reduced padding
+    minHeight: 28, // Reduced minimum touch target
+    flex: 1, // Allow equal distribution of space
+    maxWidth: 60, // Limit maximum width to prevent overflow
   },
   toolChipActive: {
     backgroundColor: '#6366f1',
   },
   toolChipText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 10, // Reduced font size
     fontWeight: '700',
   },
-  sizeSlider: {
+  sliderContainer: {
     flex: 1,
-    height: 32,
-    marginHorizontal: 8,
+    marginHorizontal: 4,
+  },
+  sizeSlider: {
+    width: '100%',
+    height: 28, // Reduced height
   },
   toolsCollapse: {
-    padding: 8,
+    padding: 6, // Reduced padding
     backgroundColor: 'rgba(226,232,240,0.9)',
-    borderRadius: 14,
+    borderRadius: 10, // Reduced border radius
+    minWidth: 28, // Ensure minimum touch target
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Bottom dock - tools row
@@ -1385,8 +1393,8 @@ const styles = StyleSheet.create({
   // Radial FAB menu
   fabContainer: {
     position: 'absolute',
-    bottom: 24,
-    right: 16, // Reduced offset from right edge
+    bottom: 16, // Further reduced default bottom padding
+    right: 12, // Further reduced offset from right edge
     alignItems: 'flex-end',
     justifyContent: 'flex-end',
     zIndex: 20,
