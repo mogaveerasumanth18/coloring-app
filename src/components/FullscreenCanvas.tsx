@@ -234,9 +234,7 @@ export default function FullscreenCanvas({
   const [uiMode, setUiMode] = useState<'full' | 'compact' | 'minimal'>('compact');
   // Removed the temporary zoom slider overlay to reduce clutter
   const [toolsVisible, setToolsVisible] = useState(false); // bottom tools panel collapsed by default
-  // Radial FAB menu state
-  const [fabOpen, setFabOpen] = useState(false);
-  const fabAnim = useRef(new Animated.Value(0)).current;
+  // Removed radial FAB menu - actions integrated into tools panel
   // UI visibility animation
   const uiOpacityAnim = useRef(new Animated.Value(1)).current;
 
@@ -310,14 +308,7 @@ export default function FullscreenCanvas({
     };
   });
 
-  useEffect(() => {
-    Animated.timing(fabAnim, {
-      toValue: fabOpen ? 1 : 0,
-      duration: 120, // Reduced duration for snappier animation
-      easing: Easing.out(Easing.ease), // Simpler easing
-      useNativeDriver: true,
-    }).start();
-  }, [fabOpen, fabAnim]);
+  // Removed FAB animation
 
   // Animate UI visibility changes
   useEffect(() => {
@@ -417,18 +408,25 @@ export default function FullscreenCanvas({
   }, [currentBrushSize]);
 
   useEffect(() => {
-    if (isVisible && Platform.OS !== 'web') {
-      // Lock to landscape when entering fullscreen
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-      StatusBar.setHidden(true);
-    }
+    const lockOrientation = async () => {
+      if (isVisible && Platform.OS !== 'web') {
+        // Lock to landscape when entering fullscreen
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+        StatusBar.setHidden(true);
+      }
+    };
+
+    lockOrientation();
 
     return () => {
-      if (Platform.OS !== 'web') {
-        // Restore portrait when leaving fullscreen
-        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-        StatusBar.setHidden(false);
-      }
+      const unlockOrientation = async () => {
+        if (Platform.OS !== 'web') {
+          // Restore portrait when leaving fullscreen
+          await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+          StatusBar.setHidden(false);
+        }
+      };
+      unlockOrientation();
     };
   }, [isVisible]);
 
@@ -457,14 +455,12 @@ export default function FullscreenCanvas({
       await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
       StatusBar.setHidden(false);
     }
-    setFabOpen(false);
     onClose();
   };
 
   const handleSave = async () => {
     if (Platform.OS === 'web') {
       canvasRef.current?.save?.();
-      setFabOpen(false);
       return;
     }
 
@@ -490,7 +486,6 @@ export default function FullscreenCanvas({
         await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
       }
       Alert.alert('Saved to Gallery', 'Your masterpiece was saved to the Photos app!');
-      setFabOpen(false);
     } catch (e: any) {
       Alert.alert('Save failed', e?.message ?? 'Unknown error');
     }
@@ -630,9 +625,9 @@ export default function FullscreenCanvas({
               styles.topActionsContainer,
               {
                 opacity: uiOpacityAnim,
-                top: Math.max(8, 12 + (insets?.top ?? 0)), // Further reduced top padding
-                left: Math.max(8, 12 + (insets?.left ?? 0)), // Further reduced left padding
-                right: Math.max(8, 12 + (insets?.right ?? 0)), // Further reduced right padding
+                top: Math.max(12, 16 + (insets?.top ?? 0)), // Increased for better visibility
+                left: Math.max(12, 16 + (insets?.left ?? 0)), // Increased for better spacing
+                right: Math.max(12, 16 + (insets?.right ?? 0)), // Increased for better spacing
               }
             ]}
             pointerEvents={uiVisible ? 'auto' : 'none'}
@@ -718,8 +713,8 @@ export default function FullscreenCanvas({
                     inputRange: [0, 1],
                     outputRange: [1, 0], // Inverse of UI visibility
                   }),
-                  top: Math.max(8, 12 + (insets?.top ?? 0)), // Further reduced top padding
-                  right: Math.max(8, 12 + (insets?.right ?? 0)), // Further reduced right padding
+                  top: Math.max(12, 16 + (insets?.top ?? 0)), // Increased for better visibility
+                  right: Math.max(12, 16 + (insets?.right ?? 0)), // Increased for better spacing
                 }
               ]}
             >
@@ -742,9 +737,9 @@ export default function FullscreenCanvas({
               style={[
                 styles.toolsHandleContainer,
                 {
-                  bottom: Math.max(16, 20 + (insets?.bottom ?? 0)), // Further reduced padding
-                  left: Math.max(8, 12 + (insets?.left ?? 0)), // Reduced left padding
-                  right: Math.max(100, 108 + (insets?.right ?? 0)), // Increased right margin to avoid FAB overlap
+                  bottom: Math.max(20, 24 + (insets?.bottom ?? 0)), // Increased for better visibility above nav bar
+                  left: Math.max(12, 16 + (insets?.left ?? 0)), // Increased left padding
+                  right: Math.max(12, 16 + (insets?.right ?? 0)), // No need to avoid FAB anymore
                 }
               ]}
               pointerEvents={'auto'}
@@ -756,38 +751,55 @@ export default function FullscreenCanvas({
                 </TouchableOpacity>
               ) : (
                 <View style={styles.toolsPanel}>
+                  {/* Drawing Tools Row */}
                   <View style={styles.toolsRow}>
                     <TouchableOpacity
                       style={[styles.toolChip, currentTool === 'brush' && styles.toolChipActive]}
                       onPress={() => setCurrentTool('brush')}
                     >
-                      <MaterialIcons name="brush" size={16} color="#ffffff" />
+                      <MaterialIcons name="brush" size={18} color="#ffffff" />
                       <Text style={styles.toolChipText}>Paint</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.toolChip, currentTool === 'bucket' && styles.toolChipActive]}
                       onPress={() => setCurrentTool('bucket')}
                     >
-                      <MaterialIcons name="format-color-fill" size={16} color="#ffffff" />
+                      <MaterialIcons name="format-color-fill" size={18} color="#ffffff" />
                       <Text style={styles.toolChipText}>Fill</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.toolChip, currentTool === 'eraser' && styles.toolChipActive]}
                       onPress={() => setCurrentTool('eraser')}
                     >
-                      <MaterialIcons name="auto-fix-off" size={16} color="#ffffff" />
+                      <MaterialIcons name="auto-fix-off" size={18} color="#ffffff" />
                       <Text style={styles.toolChipText}>Erase</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.toolChip, currentTool === 'move' && styles.toolChipActive]}
                       onPress={() => setCurrentTool('move')}
                     >
-                      <Feather name="move" size={16} color="#ffffff" />
+                      <Feather name="move" size={18} color="#ffffff" />
                       <Text style={styles.toolChipText}>Move</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.toolChip} onPress={() => setShowColorPicker(true)}>
                       <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
                       <Text style={styles.toolChipText}>Color</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Action Buttons Row */}
+                  <View style={styles.actionButtonsRow}>
+                    <TouchableOpacity style={styles.actionChip} onPress={handleSave}>
+                      <Feather name="save" size={18} color="#ffffff" />
+                      <Text style={styles.actionChipText}>Save</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionChip, styles.clearChip]} onPress={handleClear}>
+                      <Feather name="trash-2" size={18} color="#ffffff" />
+                      <Text style={styles.actionChipText}>Clear</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionChip, styles.exitChip]} onPress={handleClose}>
+                      <Feather name="x" size={18} color="#ffffff" />
+                      <Text style={styles.actionChipText}>Exit</Text>
                     </TouchableOpacity>
                   </View>
                   <View style={styles.toolsRow}>
@@ -825,85 +837,7 @@ export default function FullscreenCanvas({
             </View>
           )}
 
-          {/* Radial floating actions (Save, Clear, Exit) */}
-          <Animated.View
-            style={[
-              styles.fabContainer,
-              {
-                opacity: uiVisible || fabOpen ? uiOpacityAnim : 0,
-                bottom: Math.max(16, 20 + (insets?.bottom ?? 0)), // Further reduced bottom padding
-                right: Math.max(12, 16 + (insets?.right ?? 0)), // Further reduced right padding
-              },
-            ]}
-            pointerEvents={uiVisible || fabOpen ? 'auto' : 'none'}
-          >
-            {/* Animated radial items */}
-            <Animated.View pointerEvents={fabOpen ? 'auto' : 'none'}>
-              <Animated.View
-                style={[
-                  styles.fabItem,
-                  styles.fabSave,
-                  {
-                    opacity: fabAnim,
-                    transform: [
-                      { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -60] }) }, // Reduced spacing
-                      { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
-                    ],
-                  },
-                ]}
-              >
-                <TouchableOpacity onPress={handleSave} activeOpacity={0.85}>
-                  <Feather name="save" size={18} color="#ffffff" />
-                </TouchableOpacity>
-              </Animated.View>
-
-              <Animated.View
-                style={[
-                  styles.fabItem,
-                  styles.fabClear,
-                  {
-                    opacity: fabAnim,
-                    transform: [
-                      { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -48] }) }, // Reduced spacing
-                      { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -48] }) }, // Reduced spacing
-                      { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
-                    ],
-                  },
-                ]}
-              >
-                <TouchableOpacity onPress={handleClear} activeOpacity={0.85}>
-                  <Feather name="trash-2" size={18} color="#ffffff" />
-                </TouchableOpacity>
-              </Animated.View>
-
-              <Animated.View
-                style={[
-                  styles.fabItem,
-                  styles.fabExit,
-                  {
-                    opacity: fabAnim,
-                    transform: [
-                      { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -68] }) }, // Reduced spacing
-                      { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
-                    ],
-                  },
-                ]}
-              >
-                <TouchableOpacity onPress={handleClose} activeOpacity={0.85}>
-                  <Feather name="x" size={18} color="#ffffff" />
-                </TouchableOpacity>
-              </Animated.View>
-            </Animated.View>
-            <TouchableOpacity
-              onPress={() => setFabOpen((v) => !v)}
-              activeOpacity={0.9}
-              style={[styles.fabMain, fabOpen && styles.fabMainOpen]}
-            >
-              <Feather name={fabOpen ? 'x' : 'grid'} size={20} color="#ffffff" />
-            </TouchableOpacity>
-          </Animated.View>
-
-          {/* UI mode toggle chip removed in favor of toolbar button */}
+          {/* Radial FAB menu removed - actions integrated into tools panel */}
         </SafeAreaView>
 
         {/* Color Picker Modal */}
@@ -1019,17 +953,17 @@ const styles = StyleSheet.create({
   // Top toolbar
   topActionsContainer: {
     position: 'absolute',
-    top: 8, // Further reduced default top padding
-    left: 8, // Further reduced default left padding
-    right: 8, // Further reduced default right padding
+    top: 12, // Increased for better visibility
+    left: 12, // Increased for better visibility
+    right: 12, // Increased for better visibility
     zIndex: 10,
-    gap: 4, // Further reduced gap
+    gap: 6, // Increased gap for better spacing
   },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4, // Further reduced gap to prevent overflow
-    flexWrap: 'nowrap', // Prevent wrapping to keep buttons in single row
+    gap: 6, // Increased gap for better spacing
+    flexWrap: 'wrap', // Allow wrapping if needed
     justifyContent: 'flex-start', // Better alignment on mobile
   },
   actionButton: {
@@ -1097,9 +1031,9 @@ const styles = StyleSheet.create({
   },
   sizeLabel: {
     color: '#1f2937',
-    fontSize: 10, // Reduced font size
+    fontSize: 11, // Increased font size for better readability
     fontWeight: '600',
-    minWidth: 50, // Ensure consistent width
+    minWidth: 60, // Increased width for better spacing
   },
   sizeIndicator: {
     width: 24,
@@ -1145,9 +1079,9 @@ const styles = StyleSheet.create({
   // Collapsible Tools panel
   toolsHandleContainer: {
     position: 'absolute',
-    bottom: 16, // Further reduced default bottom padding
-    left: 8, // Further reduced default left padding
-    right: 100, // Further increased to avoid FAB overlap
+    bottom: 20, // Increased for better visibility above nav bar
+    left: 12, // Increased for better spacing
+    right: 12, // No need to avoid FAB anymore
     alignItems: 'center',
     zIndex: 12,
   },
@@ -1172,8 +1106,8 @@ const styles = StyleSheet.create({
   },
   toolsPanel: {
     backgroundColor: 'rgba(255,255,255,0.98)',
-    borderRadius: 12, // Reduced border radius
-    padding: 8, // Further reduced padding
+    borderRadius: 16, // Restored border radius
+    padding: 12, // Increased padding for better spacing
     marginHorizontal: 0, // Remove horizontal margin to maximize space
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -1181,42 +1115,42 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
     maxWidth: '100%', // Ensure it doesn't exceed container width
+    width: '100%', // Take full available width
   },
   toolsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4, // Further reduced gap
-    marginVertical: 2, // Reduced vertical margin
-    flexWrap: 'nowrap', // Prevent wrapping to keep tools in single row
+    justifyContent: 'space-between', // Better distribution
+    gap: 6, // Increased gap for better spacing
+    marginVertical: 4, // Increased vertical margin
+    flexWrap: 'wrap', // Allow wrapping if needed
   },
   toolChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2, // Further reduced gap
+    gap: 4, // Increased gap for better spacing
     backgroundColor: '#9ca3af',
-    borderRadius: 10, // Further reduced radius
-    paddingHorizontal: 6, // Further reduced padding
-    paddingVertical: 4, // Further reduced padding
-    minHeight: 28, // Reduced minimum touch target
-    flex: 1, // Allow equal distribution of space
-    maxWidth: 60, // Limit maximum width to prevent overflow
+    borderRadius: 12, // Increased radius
+    paddingHorizontal: 10, // Increased padding
+    paddingVertical: 6, // Increased padding
+    minHeight: 36, // Increased minimum touch target
+    minWidth: 70, // Ensure minimum width for readability
   },
   toolChipActive: {
     backgroundColor: '#6366f1',
   },
   toolChipText: {
     color: '#ffffff',
-    fontSize: 10, // Reduced font size
+    fontSize: 11, // Increased font size for better readability
     fontWeight: '700',
   },
   sliderContainer: {
     flex: 1,
-    marginHorizontal: 4,
+    marginHorizontal: 8, // Increased margin
   },
   sizeSlider: {
     width: '100%',
-    height: 28, // Reduced height
+    height: 32, // Increased height for better touch target
   },
   toolsCollapse: {
     padding: 6, // Reduced padding
@@ -1225,6 +1159,41 @@ const styles = StyleSheet.create({
     minWidth: 28, // Ensure minimum touch target
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // Action Buttons Row
+  actionButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(226,232,240,0.5)',
+  },
+  actionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#10b981',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    minHeight: 36,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  clearChip: {
+    backgroundColor: '#ef4444',
+  },
+  exitChip: {
+    backgroundColor: '#6b7280',
+  },
+  actionChipText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
   },
 
   // Bottom dock - tools row
@@ -1390,52 +1359,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Radial FAB menu
-  fabContainer: {
-    position: 'absolute',
-    bottom: 16, // Further reduced default bottom padding
-    right: 12, // Further reduced offset from right edge
-    alignItems: 'flex-end',
-    justifyContent: 'flex-end',
-    zIndex: 20,
-  },
-  fabMain: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#111827',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 12,
-  },
-  fabMainOpen: {
-    backgroundColor: '#4f46e5',
-  },
-  fabItem: {
-    position: 'absolute',
-    width: 44, // Slightly smaller to fit better
-    height: 44, // Slightly smaller to fit better
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 10,
-    backgroundColor: '#6b7280',
-  },
-  fabSave: {
-    backgroundColor: '#10b981',
-  },
-  fabClear: {
-    backgroundColor: '#ef4444',
-  },
-  fabExit: {
-    backgroundColor: '#6b7280',
-  },
+  // Radial FAB menu removed - actions integrated into tools panel
 });
