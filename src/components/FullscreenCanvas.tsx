@@ -1,5 +1,5 @@
 import { Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -268,7 +268,7 @@ export default function FullscreenCanvas({
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     },
-  }, [currentTool]); // Add dependency to reduce re-creation
+  });
 
   const pinchHandler = useAnimatedGestureHandler({
     onStart: (event: any) => {
@@ -293,7 +293,7 @@ export default function FullscreenCanvas({
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     },
-  }, [MIN_ZOOM, MAX_ZOOM]); // Add dependencies to reduce re-creation
+  });
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -305,7 +305,15 @@ export default function FullscreenCanvas({
     };
   });
 
-  // Removed FAB animation
+  // FAB animation
+  useEffect(() => {
+    Animated.timing(fabAnim, {
+      toValue: fabOpen ? 1 : 0,
+      duration: 250,
+      easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+      useNativeDriver: false,
+    }).start();
+  }, [fabOpen, fabAnim]);
 
   // Animate UI visibility changes
   useEffect(() => {
@@ -522,76 +530,6 @@ export default function FullscreenCanvas({
     >
       <View style={styles.fullscreenContainer}>
         <SafeAreaView style={styles.safeArea}>
-          {uiMode !== 'minimal' && (
-            <View style={styles.toolsSidebar}>
-            {/* Tools Column */}
-            <View style={styles.toolsColumn}>
-              <TouchableOpacity
-                style={[styles.toolChip, currentTool === 'brush' && styles.toolChipActive]}
-                onPress={() => setCurrentTool('brush')}
-              >
-                <MaterialIcons name="brush" size={18} color="#ffffff" />
-                <Text style={styles.toolChipText}>Paint</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.toolChip, currentTool === 'bucket' && styles.toolChipActive]}
-                onPress={() => setCurrentTool('bucket')}
-              >
-                <MaterialIcons name="format-color-fill" size={18} color="#ffffff" />
-                <Text style={styles.toolChipText}>Fill</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.toolChip, currentTool === 'eraser' && styles.toolChipActive]}
-                onPress={() => setCurrentTool('eraser')}
-              >
-                <MaterialIcons name="auto-fix-off" size={18} color="#ffffff" />
-                <Text style={styles.toolChipText}>Eraser</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.toolChip, currentTool === 'move' && styles.toolChipActive]}
-                onPress={() => setCurrentTool('move')}
-              >
-                <Feather name="move" size={18} color="#ffffff" />
-                <Text style={styles.toolChipText}>Move</Text>
-              </TouchableOpacity>
-              
-              {/* Color Picker Button */}
-              <TouchableOpacity 
-                style={styles.toolChip} 
-                onPress={() => setShowColorPicker(true)}
-              >
-                <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
-                <Text style={styles.toolChipText}>Color</Text>
-              </TouchableOpacity>
-
-              {/* Size Controls */}
-              <View style={styles.sizeControlsColumn}>
-                <Text style={styles.sizeLabel}>Size: {Math.round(currentBrushSize)}px</Text>
-                <Slider
-                  key={`slider-${currentBrushSize}`}
-                  style={styles.verticalSizeSlider}
-                  minimumValue={2}
-                  maximumValue={50}
-                  value={currentBrushSize}
-                  step={1}
-                  onSlidingStart={keepUiVisible}
-                  onValueChange={(v: number) => {
-                    keepUiVisible();
-                    setCurrentBrushSize(v);
-                  }}
-                  onSlidingComplete={(v: number) => {
-                    keepUiVisible();
-                    setCurrentBrushSize(v);
-                  }}
-                  minimumTrackTintColor="#6366f1"
-                  maximumTrackTintColor="#CBD5E1"
-                  thumbTintColor="#6366f1"
-                  accessibilityLabel="Brush size"
-                />
-              </View>
-            </View>
-          </View>
-          )}
 
           {/* Canvas area */}
           <TouchableOpacity
@@ -675,8 +613,8 @@ export default function FullscreenCanvas({
         {/* Left sidebar toolbar */}
         <Animated.View
           style={[
-            styles.leftActionsContainer, 
-            { 
+            styles.leftActionsContainer,
+            {
               opacity: uiOpacityAnim,
               top: Math.max(24, 32 + (insets?.top ?? 0)),
               left: Math.max(16, 20 + (insets?.left ?? 0)),
@@ -687,30 +625,137 @@ export default function FullscreenCanvas({
           <View style={styles.actionColumn}>
             {uiMode !== 'minimal' && (
               <>
+                {/* Tool Selection */}
+                <TouchableOpacity
+                  style={[
+                    uiMode === 'compact' ? styles.smallActionButton : styles.actionButton,
+                    currentTool === 'brush' && styles.activeActionButton
+                  ]}
+                  onPress={() => {
+                    setCurrentTool('brush');
+                    keepUiVisible();
+                  }}
+                >
+                  <Feather name="edit-3" size={18} color="#ffffff" />
+                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Brush</Text>}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    uiMode === 'compact' ? styles.smallActionButton : styles.actionButton,
+                    currentTool === 'bucket' && styles.activeActionButton
+                  ]}
+                  onPress={() => {
+                    setCurrentTool('bucket');
+                    keepUiVisible();
+                  }}
+                >
+                  <Feather name="droplet" size={18} color="#ffffff" />
+                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Fill</Text>}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    uiMode === 'compact' ? styles.smallActionButton : styles.actionButton,
+                    currentTool === 'eraser' && styles.activeActionButton
+                  ]}
+                  onPress={() => {
+                    setCurrentTool('eraser');
+                    keepUiVisible();
+                  }}
+                >
+                  <Feather name="square" size={18} color="#ffffff" />
+                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Eraser</Text>}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    uiMode === 'compact' ? styles.smallActionButton : styles.actionButton,
+                    currentTool === 'move' && styles.activeActionButton
+                  ]}
+                  onPress={() => {
+                    setCurrentTool('move');
+                    keepUiVisible();
+                  }}
+                >
+                  <Feather name="move" size={18} color="#ffffff" />
+                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Move</Text>}
+                </TouchableOpacity>
+
+                {/* Brush Size Control */}
+                {(uiMode === 'full' || uiMode === 'compact') && (
+                  <View style={styles.sizeControl}>
+                    <Text style={styles.sizeLabel}>Size: {Math.round(currentBrushSize)}px</Text>
+                    <View style={styles.sizeSliderContainer}>
+                      <Slider
+                        style={styles.sizeSlider}
+                        value={currentBrushSize}
+                        onValueChange={setCurrentBrushSize}
+                        minimumValue={2}
+                        maximumValue={50}
+                        step={1}
+                        minimumTrackTintColor="#6366f1"
+                        maximumTrackTintColor="#e5e7eb"
+                        onSlidingStart={keepUiVisible}
+                      />
+                    </View>
+                    <View style={styles.sizeIndicator}>
+                      <View style={[styles.sizeDot, { width: Math.min(currentBrushSize / 2, 20), height: Math.min(currentBrushSize / 2, 20) }]} />
+                    </View>
+                  </View>
+                )}
+
+                {/* Color Picker Button */}
+                <TouchableOpacity
+                  style={uiMode === 'compact' ? styles.smallActionButton : styles.colorPickerButton}
+                  onPress={() => {
+                    setShowColorPicker(true);
+                    keepUiVisible();
+                  }}
+                >
+                  <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
+                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Color</Text>}
+                </TouchableOpacity>
+
+                {/* Undo/Redo */}
                 <TouchableOpacity
                   style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-                  onPress={() => canvasRef.current?.undo?.()}
+                  onPress={() => {
+                    canvasRef.current?.undo?.();
+                    keepUiVisible();
+                  }}
                 >
                   <Ionicons name="arrow-undo" size={18} color="#ffffff" />
                   {uiMode === 'full' && <Text style={styles.actionButtonText}>Undo</Text>}
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-                  onPress={() => canvasRef.current?.redo?.()}
+                  onPress={() => {
+                    canvasRef.current?.redo?.();
+                    keepUiVisible();
+                  }}
                 >
                   <Ionicons name="arrow-redo" size={18} color="#ffffff" />
                   {uiMode === 'full' && <Text style={styles.actionButtonText}>Redo</Text>}
                 </TouchableOpacity>
+
+                {/* Zoom Controls */}
                 <TouchableOpacity
                   style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-                  onPress={() => updateZoom(zoom + 0.25)}
+                  onPress={() => {
+                    updateZoom(zoom + 0.25);
+                    keepUiVisible();
+                  }}
                 >
                   <Feather name="zoom-in" size={18} color="#ffffff" />
                   {uiMode === 'full' && <Text style={styles.actionButtonText}>Zoom In</Text>}
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-                  onPress={() => updateZoom(zoom - 0.25)}
+                  onPress={() => {
+                    updateZoom(zoom - 0.25);
+                    keepUiVisible();
+                  }}
                 >
                   <Feather name="zoom-out" size={18} color="#ffffff" />
                   {uiMode === 'full' && <Text style={styles.actionButtonText}>Zoom Out</Text>}
@@ -720,7 +765,10 @@ export default function FullscreenCanvas({
                 </View>
                 <TouchableOpacity
                   style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-                  onPress={() => updateZoom(1)}
+                  onPress={() => {
+                    updateZoom(1);
+                    keepUiVisible();
+                  }}
                 >
                   <Feather name="refresh-ccw" size={18} color="#ffffff" />
                   {uiMode === 'full' && <Text style={styles.actionButtonText}>Reset</Text>}
@@ -781,8 +829,53 @@ export default function FullscreenCanvas({
           </Animated.View>
         )}
 
-          {/* Bottom dock removed; replaced by collapsible Tools panel below */}
-
+          {/* Color Palette - Bottom area */}
+          {uiMode !== 'minimal' && (
+            <Animated.View
+              style={[
+                styles.colorPaletteContainer,
+                {
+                  opacity: uiOpacityAnim,
+                  bottom: Math.max(140, 160 + (insets?.bottom ?? 0)),
+                  left: 16,
+                  right: 100, // Leave space for FAB menu
+                }
+              ]}
+              pointerEvents={uiVisible ? 'auto' : 'none'}
+            >
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.colorPalette}
+              >
+                {colors.slice(0, 12).map((color) => (
+                  <TouchableOpacity
+                    key={color}
+                    style={[
+                      styles.colorPaletteItem,
+                      { backgroundColor: color },
+                      currentColor === color && styles.selectedColorPaletteItem,
+                    ]}
+                    onPress={() => {
+                      setCurrentColor(color);
+                      keepUiVisible();
+                    }}
+                    activeOpacity={0.8}
+                  />
+                ))}
+                {/* Show more colors button */}
+                <TouchableOpacity
+                  style={styles.colorPaletteItem}
+                  onPress={() => {
+                    setShowColorPicker(true);
+                    keepUiVisible();
+                  }}
+                >
+                  <Feather name="more-horizontal" size={16} color="#ffffff" />
+                </TouchableOpacity>
+              </ScrollView>
+            </Animated.View>
+          )}
 
         {/* Radial floating actions (Save, Clear, Exit) - Positioned on the right */}
         <Animated.View
@@ -1092,6 +1185,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  sizeSliderContainer: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  sizeSlider: {
+    width: '100%',
+    height: 30,
+  },
 
   // Color Picker Button
   colorPickerButton: {
@@ -1369,5 +1470,46 @@ const styles = StyleSheet.create({
   },
   fabExit: {
     backgroundColor: '#6b7280',
+  },
+
+  // Color Palette
+  colorPaletteContainer: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 15,
+  },
+  colorPalette: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  colorPaletteItem: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  selectedColorPaletteItem: {
+    borderColor: '#6366f1',
+    transform: [{ scale: 1.1 }],
   },
 });
