@@ -26,10 +26,10 @@ import {
   GestureHandlerRootView,
   State,
 } from 'react-native-gesture-handler';
-import ReanimatedAnimated, { 
-  useSharedValue, 
-  useAnimatedGestureHandler, 
-  useAnimatedStyle, 
+import ReanimatedAnimated, {
+  useSharedValue,
+  useAnimatedGestureHandler,
+  useAnimatedStyle,
   runOnJS,
   withSpring,
   withDecay
@@ -139,22 +139,22 @@ function tryGetDataUrlSize(uri: string): { width: number; height: number } | nul
 }
 
 // Custom Color Picker Component using react-native-wheel-color-picker
-const CustomColorPicker = ({ 
-  selectedColor, 
-  onColorChange 
-}: { 
-  selectedColor: string; 
+const CustomColorPicker = ({
+  selectedColor,
+  onColorChange
+}: {
+  selectedColor: string;
   onColorChange: (color: string) => void;
 }) => {
   return (
-    <View style={{ padding: 20 }}>
+    <View style={{ padding: 16 }}>
       {/* Color Preview */}
       <View style={{
         width: '100%',
         height: 50,
         backgroundColor: selectedColor,
         borderRadius: 12,
-        marginBottom: 20,
+        marginBottom: 16,
         borderWidth: 2,
         borderColor: '#E2E8F0',
         shadowColor: '#000',
@@ -164,20 +164,21 @@ const CustomColorPicker = ({
         elevation: 2,
       }} />
 
-      {/* Clean Color Wheel - No Swatches */}
+      {/* Clean Color Wheel - Only the wheel, no slider or extra elements */}
       <View style={{
         width: '100%',
-        height: 250,
+        height: 220,
         alignItems: 'center',
         justifyContent: 'center',
+        overflow: 'hidden',
       }}>
         <ColorPicker
           color={selectedColor}
           onColorChange={(color: string) => {
             onColorChange(color);
           }}
-          thumbSize={35}
-          sliderSize={30}
+          thumbSize={30}
+          sliderSize={0}
           noSnap={true}
           row={false}
           swatches={false}
@@ -185,6 +186,8 @@ const CustomColorPicker = ({
           discrete={false}
           useNativeDriver={true}
           useNativeLayout={false}
+          gapSize={0}
+          autoResetSlider={false}
         />
       </View>
     </View>
@@ -231,9 +234,7 @@ export default function FullscreenCanvas({
   const [uiMode, setUiMode] = useState<'full' | 'compact' | 'minimal'>('compact');
   // Removed the temporary zoom slider overlay to reduce clutter
   const [toolsVisible, setToolsVisible] = useState(false); // bottom tools panel collapsed by default
-  // Radial FAB menu state
-  const [fabOpen, setFabOpen] = useState(false);
-  const fabAnim = useRef(new Animated.Value(0)).current;
+  // Removed radial FAB menu - actions integrated into tools panel
   // UI visibility animation
   const uiOpacityAnim = useRef(new Animated.Value(1)).current;
 
@@ -270,7 +271,7 @@ export default function FullscreenCanvas({
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     },
-  });
+  }, [currentTool]); // Add dependency to reduce re-creation
 
   const pinchHandler = useAnimatedGestureHandler({
     onStart: (event: any) => {
@@ -283,17 +284,10 @@ export default function FullscreenCanvas({
     onActive: (event: any) => {
       const newScale = savedScale.value * event.scale;
       const clampedScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newScale));
-      
-      if (clampedScale !== scale.value) {
-        // Calculate focal point adjustment
-        const scaleDiff = clampedScale - savedScale.value;
-        const adjustX = (focalX.value - savedTranslateX.value) * (scaleDiff / savedScale.value);
-        const adjustY = (focalY.value - savedTranslateY.value) * (scaleDiff / savedScale.value);
-        
+
+      // Reduce frequency of updates to improve performance
+      if (Math.abs(clampedScale - scale.value) > 0.01) {
         scale.value = clampedScale;
-        translateX.value = savedTranslateX.value - adjustX;
-        translateY.value = savedTranslateY.value - adjustY;
-        
         runOnJS(updateZoom)(clampedScale);
       }
     },
@@ -302,7 +296,7 @@ export default function FullscreenCanvas({
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     },
-  });
+  }, [MIN_ZOOM, MAX_ZOOM]); // Add dependencies to reduce re-creation
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -314,21 +308,14 @@ export default function FullscreenCanvas({
     };
   });
 
-  useEffect(() => {
-    Animated.timing(fabAnim, {
-      toValue: fabOpen ? 1 : 0,
-      duration: 160,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start();
-  }, [fabOpen, fabAnim]);
+  // Removed FAB animation
 
   // Animate UI visibility changes
   useEffect(() => {
     Animated.timing(uiOpacityAnim, {
       toValue: uiVisible ? 1 : 0,
-      duration: 200,
-      easing: Easing.inOut(Easing.ease),
+      duration: 150, // Reduced duration for snappier animation
+      easing: Easing.ease, // Simpler easing
       useNativeDriver: true,
     }).start();
   }, [uiVisible, uiOpacityAnim]);
@@ -362,7 +349,7 @@ export default function FullscreenCanvas({
       return;
     }
     startAutoHideTimer();
-    
+
     return () => clearAutoHideTimer();
   }, [isVisible]);
 
@@ -382,7 +369,7 @@ export default function FullscreenCanvas({
     setUiVisible(true);
     startAutoHideTimer();
   };
-  
+
   const cycleUiMode = () => {
     setUiVisible(true);
     setUiMode((m) => (m === 'full' ? 'compact' : m === 'compact' ? 'minimal' : 'full'));
@@ -421,18 +408,25 @@ export default function FullscreenCanvas({
   }, [currentBrushSize]);
 
   useEffect(() => {
-    if (isVisible && Platform.OS !== 'web') {
-      // Lock to landscape when entering fullscreen
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-      StatusBar.setHidden(true);
-    }
+    const lockOrientation = async () => {
+      if (isVisible && Platform.OS !== 'web') {
+        // Lock to landscape when entering fullscreen
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+        StatusBar.setHidden(true);
+      }
+    };
+
+    lockOrientation();
 
     return () => {
-      if (Platform.OS !== 'web') {
-        // Restore portrait when leaving fullscreen
-        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-        StatusBar.setHidden(false);
-      }
+      const unlockOrientation = async () => {
+        if (Platform.OS !== 'web') {
+          // Restore portrait when leaving fullscreen
+          await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+          StatusBar.setHidden(false);
+        }
+      };
+      unlockOrientation();
     };
   }, [isVisible]);
 
@@ -461,14 +455,12 @@ export default function FullscreenCanvas({
       await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
       StatusBar.setHidden(false);
     }
-  setFabOpen(false);
     onClose();
   };
 
   const handleSave = async () => {
     if (Platform.OS === 'web') {
-  canvasRef.current?.save?.();
-  setFabOpen(false);
+      canvasRef.current?.save?.();
       return;
     }
 
@@ -493,8 +485,7 @@ export default function FullscreenCanvas({
       } else {
         await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
       }
-  Alert.alert('Saved to Gallery', 'Your masterpiece was saved to the Photos app!');
-  setFabOpen(false);
+      Alert.alert('Saved to Gallery', 'Your masterpiece was saved to the Photos app!');
     } catch (e: any) {
       Alert.alert('Save failed', e?.message ?? 'Unknown error');
     }
@@ -547,86 +538,86 @@ export default function FullscreenCanvas({
       supportedOrientations={["landscape", "landscape-left", "landscape-right"]}
       statusBarTranslucent
     >
-    <View style={styles.fullscreenContainer}>
-      <SafeAreaView style={styles.safeArea}>
-        {/* Canvas area */}
-        <TouchableOpacity
-          style={[
-            styles.canvasSection,
-            // Remove padding to prevent canvas shrinking - tools will be positioned absolutely
-          ]}
-          onPress={() => {
-            if (!uiVisible) {
-              setUiVisible(true);
-              startAutoHideTimer();
-            }
-          }}
-          activeOpacity={1}
-        >
-          <View
-            style={styles.canvasContainer}
-            onLayout={(e) => {
-              const { width, height } = e.nativeEvent.layout;
-              if (width && height) setCanvasSize({ width, height });
+      <View style={styles.fullscreenContainer}>
+        <SafeAreaView style={styles.safeArea}>
+          {/* Canvas area */}
+          <TouchableOpacity
+            style={[
+              styles.canvasSection,
+              // Remove padding to prevent canvas shrinking - tools will be positioned absolutely
+            ]}
+            onPress={() => {
+              if (!uiVisible) {
+                setUiVisible(true);
+                startAutoHideTimer();
+              }
             }}
+            activeOpacity={1}
           >
-            {templateUri ? (
-              !templateSize ? (
-                <View style={styles.emptyCanvas}>
-                  <Text style={styles.emptyCanvasText}>Loading image…</Text>
-                </View>
+            <View
+              style={styles.canvasContainer}
+              onLayout={(e) => {
+                const { width, height } = e.nativeEvent.layout;
+                if (width && height) setCanvasSize({ width, height });
+              }}
+            >
+              {templateUri ? (
+                !templateSize ? (
+                  <View style={styles.emptyCanvas}>
+                    <Text style={styles.emptyCanvasText}>Loading image…</Text>
+                  </View>
+                ) : (
+                  <GestureHandlerRootView style={{ flex: 1 }}>
+                    <PinchGestureHandler onGestureEvent={pinchHandler}>
+                      <ReanimatedAnimated.View style={{ flex: 1 }}>
+                        <PanGestureHandler onGestureEvent={panHandler}>
+                          <ReanimatedAnimated.View
+                            ref={captureViewRef}
+                            collapsable={false}
+                            style={[
+                              {
+                                width: computeFit(canvasSize, templateSize).width,
+                                height: computeFit(canvasSize, templateSize).height,
+                              },
+                              animatedStyle
+                            ]}
+                          >
+                            {Platform.OS === 'web' ? (
+                              <WorkingColoringCanvas
+                                selectedColor={currentColor}
+                                selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                                brushSize={currentBrushSize}
+                                templateUri={templateUri}
+                                width={computeFit(canvasSize, templateSize).width}
+                                height={computeFit(canvasSize, templateSize).height}
+                              />
+                            ) : (
+                              <NativeZebraCanvas
+                                ref={canvasRef}
+                                templateUri={templateUri}
+                                selectedColor={currentColor}
+                                selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                                brushWidth={currentBrushSize}
+                                onColoringComplete={onColoringComplete}
+                                width={computeFit(canvasSize, templateSize).width}
+                                height={computeFit(canvasSize, templateSize).height}
+                                initialDataUrl={initialCanvasData}
+                                interactionEnabled={currentTool !== 'move'}
+                              />
+                            )}
+                          </ReanimatedAnimated.View>
+                        </PanGestureHandler>
+                      </ReanimatedAnimated.View>
+                    </PinchGestureHandler>
+                  </GestureHandlerRootView>
+                )
               ) : (
-                <GestureHandlerRootView style={{ flex: 1 }}>
-                  <PinchGestureHandler onGestureEvent={pinchHandler}>
-                    <ReanimatedAnimated.View style={{ flex: 1 }}>
-                      <PanGestureHandler onGestureEvent={panHandler}>
-                        <ReanimatedAnimated.View
-                          ref={captureViewRef}
-                          collapsable={false}
-                          style={[
-                            {
-                              width: computeFit(canvasSize, templateSize).width,
-                              height: computeFit(canvasSize, templateSize).height,
-                            },
-                            animatedStyle
-                          ]}
-                        >
-                          {Platform.OS === 'web' ? (
-                            <WorkingColoringCanvas
-                              selectedColor={currentColor}
-                              selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                              brushSize={currentBrushSize}
-                              templateUri={templateUri}
-                              width={computeFit(canvasSize, templateSize).width}
-                              height={computeFit(canvasSize, templateSize).height}
-                            />
-                          ) : (
-                            <NativeZebraCanvas
-                              ref={canvasRef}
-                              templateUri={templateUri}
-                              selectedColor={currentColor}
-                              selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                              brushWidth={currentBrushSize}
-                              onColoringComplete={onColoringComplete}
-                              width={computeFit(canvasSize, templateSize).width}
-                              height={computeFit(canvasSize, templateSize).height}
-                              initialDataUrl={initialCanvasData}
-                              interactionEnabled={currentTool !== 'move'}
-                            />
-                          )}
-                        </ReanimatedAnimated.View>
-                      </PanGestureHandler>
-                    </ReanimatedAnimated.View>
-                  </PinchGestureHandler>
-                </GestureHandlerRootView>
-              )
-            ) : (
-              <View style={styles.emptyCanvas}>
-                <Text style={styles.emptyCanvasText}>Select a template to start coloring! 🎨</Text>
-              </View>
-            )}
-          </View>
-        </TouchableOpacity>
+                <View style={styles.emptyCanvas}>
+                  <Text style={styles.emptyCanvasText}>Select a template to start coloring! 🎨</Text>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
 
         {/* Left sidebar toolbar */}
         <Animated.View
@@ -737,7 +728,7 @@ export default function FullscreenCanvas({
           </Animated.View>
         )}
 
-  {/* Bottom dock removed; replaced by collapsible Tools panel below */}
+          {/* Bottom dock removed; replaced by collapsible Tools panel below */}
 
         {/* Left tools: collapsed handle -> expandable panel */}
         {uiMode !== 'minimal' && (
@@ -910,59 +901,59 @@ export default function FullscreenCanvas({
   {/* UI mode toggle chip removed in favor of toolbar button */}
       </SafeAreaView>
 
-      {/* Color Picker Modal */}
-      <Modal
-        visible={showColorPicker}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowColorPicker(false)}
-      >
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowColorPicker(false)}>
-          <View style={styles.colorPickerModal}>
-            <Text style={styles.colorPickerTitle}>Pick a Color</Text>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Predefined color swatches */}
-              <View style={styles.colorGrid}>
-                {colors.map((color) => (
-                  <TouchableOpacity
-                    key={color}
-                    style={[
-                      styles.colorOption,
-                      { backgroundColor: color },
-                      currentColor === color && styles.selectedColorOption,
-                    ]}
-                    onPress={() => {
+        {/* Color Picker Modal */}
+        <Modal
+          visible={showColorPicker}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowColorPicker(false)}
+        >
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowColorPicker(false)}>
+            <View style={styles.colorPickerModal}>
+              <Text style={styles.colorPickerTitle}>Pick a Color</Text>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {/* Predefined color swatches */}
+                <View style={styles.colorGrid}>
+                  {colors.map((color) => (
+                    <TouchableOpacity
+                      key={color}
+                      style={[
+                        styles.colorOption,
+                        { backgroundColor: color },
+                        currentColor === color && styles.selectedColorOption,
+                      ]}
+                      onPress={() => {
+                        setCurrentColor(color);
+                        setShowColorPicker(false);
+                      }}
+                    />
+                  ))}
+                </View>
+
+                {/* Custom color picker with spectrum */}
+                <View style={{
+                  backgroundColor: 'white',
+                  borderRadius: 12,
+                  padding: 16,
+                  marginTop: 16,
+                  elevation: 4,
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 4
+                }}>
+                  <CustomColorPicker
+                    selectedColor={currentColor}
+                    onColorChange={(color) => {
                       setCurrentColor(color);
                       setShowColorPicker(false);
                     }}
                   />
-                ))}
-              </View>
-              
-              {/* Custom color picker with spectrum */}
-              <View style={{ 
-                backgroundColor: 'white', 
-                borderRadius: 12, 
-                padding: 16,
-                marginTop: 16,
-                elevation: 4,
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4
-              }}>
-                <CustomColorPicker
-                  selectedColor={currentColor}
-                  onColorChange={(color) => {
-                    setCurrentColor(color);
-                    setShowColorPicker(false);
-                  }}
-                />
-              </View>
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </View>
+                </View>
+              </ScrollView>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      </View>
     </Modal>
   );
 }
@@ -994,15 +985,15 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   canvasContainer: {
-  backgroundColor: '#ffffff',
-  borderRadius: 0,
-  overflow: 'hidden',
-  width: '100%',
-  height: '100%',
-  maxWidth: '100%',
-  maxHeight: '100%',
-  alignItems: 'center',
-  justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 0,
+    overflow: 'hidden',
+    width: '100%',
+    height: '100%',
+    maxWidth: '100%',
+    maxHeight: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyCanvas: {
     backgroundColor: '#f8fafc',
@@ -1020,14 +1011,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
-  
+
   // Top toolbar
   leftActionsContainer: {
     position: 'absolute',
     top: 24, // Will be overridden with safe area insets
     left: 16,
     zIndex: 10,
-    gap: 12,
+    gap: 6, // Increased gap for better spacing
   },
   actionColumn: {
     flexDirection: 'column',
@@ -1037,33 +1028,33 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     backgroundColor: '#6366f1',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  smallActionButton: {
-    backgroundColor: '#6366f1',
-    borderRadius: 16, // Slightly smaller radius
-    paddingHorizontal: 8, // Reduced padding
+    borderRadius: 18, // Reduced radius
+    paddingHorizontal: 12, // Reduced padding
     paddingVertical: 6, // Reduced padding
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3, // Reduced gap
+    gap: 4, // Reduced gap
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
     elevation: 6,
-    minWidth: 36, // Ensure minimum touch target
-    minHeight: 36, // Ensure minimum touch target
+  },
+  smallActionButton: {
+    backgroundColor: '#6366f1',
+    borderRadius: 12, // Further reduced radius
+    paddingHorizontal: 4, // Further reduced padding
+    paddingVertical: 3, // Further reduced padding
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 1, // Further reduced gap
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+    minWidth: 28, // Further reduced minimum touch target
+    minHeight: 28, // Further reduced minimum touch target
   },
   activeActionButton: {
     backgroundColor: '#4f46e5',
@@ -1076,10 +1067,10 @@ const styles = StyleSheet.create({
   },
   zoomIndicator: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 12, // Smaller radius
-    paddingHorizontal: 8, // Reduced padding
-    paddingVertical: 6, // Reduced padding
-    minWidth: 50, // Ensure minimum width for readability
+    borderRadius: 8, // Further reduced radius
+    paddingHorizontal: 4, // Further reduced padding
+    paddingVertical: 2, // Further reduced padding
+    minWidth: 36, // Further reduced minimum width
   },
   zoomText: {
     color: '#1f2937',
@@ -1087,7 +1078,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   // Zoom slider overlay removed
-  
+
   // Size Control
   sizeControl: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
@@ -1100,8 +1091,9 @@ const styles = StyleSheet.create({
   },
   sizeLabel: {
     color: '#1f2937',
-    fontSize: 12,
+    fontSize: 11, // Increased font size for better readability
     fontWeight: '600',
+    minWidth: 60, // Increased width for better spacing
   },
   sizeIndicator: {
     width: 24,
@@ -1120,7 +1112,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  
+
   // Color Picker Button
   colorPickerButton: {
     backgroundColor: '#6366f1',
@@ -1204,7 +1196,7 @@ const styles = StyleSheet.create({
   toolChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4, // Reduced gap
+    gap: 4, // Increased gap for better spacing
     backgroundColor: '#9ca3af',
     borderRadius: 14, // Smaller radius
     paddingHorizontal: 8, // Reduced padding
@@ -1218,7 +1210,7 @@ const styles = StyleSheet.create({
   },
   toolChipText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 11, // Increased font size for better readability
     fontWeight: '700',
   },
   verticalSizeSlider: {
@@ -1227,13 +1219,13 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   toolsCollapse: {
-    padding: 8,
+    padding: 6, // Reduced padding
     backgroundColor: 'rgba(226,232,240,0.9)',
     borderRadius: 14,
     width: '100%',
     alignItems: 'center',
   },
-  
+
   // Bottom dock - tools row
   bottomDock: {
     position: 'absolute',
@@ -1246,9 +1238,9 @@ const styles = StyleSheet.create({
 
   // Bottom Actions
   bottomActionsContainer: {
-  position: 'absolute',
-  bottom: 24,
-  right: 16,
+    position: 'absolute',
+    bottom: 24,
+    right: 16,
     flexDirection: 'row',
     gap: 12,
     zIndex: 10,
@@ -1319,7 +1311,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  
+
   // Color Picker Modal
   modalOverlay: {
     flex: 1,
