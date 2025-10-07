@@ -230,8 +230,6 @@ export default function FullscreenCanvas({
   const [uiVisible, setUiVisible] = useState(true);
   // UI density modes to control how much chrome is shown
   const [uiMode, setUiMode] = useState<'full' | 'compact' | 'minimal'>('compact');
-  // Removed the temporary zoom slider overlay to reduce clutter
-  const [toolsVisible, setToolsVisible] = useState(false); // bottom tools panel collapsed by default
   const [fabOpen, setFabOpen] = useState(false);
   // UI visibility animation
   const uiOpacityAnim = useRef(new Animated.Value(1)).current;
@@ -334,10 +332,7 @@ export default function FullscreenCanvas({
   const startAutoHideTimer = () => {
     clearAutoHideTimer();
     autoHideTimerRef.current = setTimeout(() => {
-      // Only hide UI if tools panel is not open
-      if (!toolsVisible) {
-        setUiVisible(false);
-      }
+      setUiVisible(false);
     }, 3000); // Increased to 3 seconds for better UX
   };
 
@@ -352,17 +347,6 @@ export default function FullscreenCanvas({
     return () => clearAutoHideTimer();
   }, [isVisible]);
 
-  // Reset auto-hide timer when tools panel is opened/closed
-  useEffect(() => {
-    if (toolsVisible) {
-      // Keep UI visible when tools panel is open
-      setUiVisible(true);
-      clearAutoHideTimer();
-    } else {
-      // Start auto-hide timer when tools panel is closed
-      startAutoHideTimer();
-    }
-  }, [toolsVisible]);
 
   const revealUi = () => {
     setUiVisible(true);
@@ -532,13 +516,83 @@ export default function FullscreenCanvas({
       transparent={false}
       animationType="fade"
       presentationStyle="fullScreen"
-      onRequestClose={handleClose}
       // iOS hint; Android will follow lockAsync
       supportedOrientations={["landscape", "landscape-left", "landscape-right"]}
       statusBarTranslucent
     >
       <View style={styles.fullscreenContainer}>
         <SafeAreaView style={styles.safeArea}>
+          {uiMode !== 'minimal' && (
+            <View style={styles.toolsSidebar}>
+            {/* Tools Column */}
+            <View style={styles.toolsColumn}>
+              <TouchableOpacity
+                style={[styles.toolChip, currentTool === 'brush' && styles.toolChipActive]}
+                onPress={() => setCurrentTool('brush')}
+              >
+                <MaterialIcons name="brush" size={18} color="#ffffff" />
+                <Text style={styles.toolChipText}>Paint</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toolChip, currentTool === 'bucket' && styles.toolChipActive]}
+                onPress={() => setCurrentTool('bucket')}
+              >
+                <MaterialIcons name="format-color-fill" size={18} color="#ffffff" />
+                <Text style={styles.toolChipText}>Fill</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toolChip, currentTool === 'eraser' && styles.toolChipActive]}
+                onPress={() => setCurrentTool('eraser')}
+              >
+                <MaterialIcons name="auto-fix-off" size={18} color="#ffffff" />
+                <Text style={styles.toolChipText}>Eraser</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toolChip, currentTool === 'move' && styles.toolChipActive]}
+                onPress={() => setCurrentTool('move')}
+              >
+                <Feather name="move" size={18} color="#ffffff" />
+                <Text style={styles.toolChipText}>Move</Text>
+              </TouchableOpacity>
+              
+              {/* Color Picker Button */}
+              <TouchableOpacity 
+                style={styles.toolChip} 
+                onPress={() => setShowColorPicker(true)}
+              >
+                <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
+                <Text style={styles.toolChipText}>Color</Text>
+              </TouchableOpacity>
+
+              {/* Size Controls */}
+              <View style={styles.sizeControlsColumn}>
+                <Text style={styles.sizeLabel}>Size: {Math.round(currentBrushSize)}px</Text>
+                <Slider
+                  key={`slider-${currentBrushSize}`}
+                  style={styles.verticalSizeSlider}
+                  minimumValue={2}
+                  maximumValue={50}
+                  value={currentBrushSize}
+                  step={1}
+                  onSlidingStart={keepUiVisible}
+                  onValueChange={(v: number) => {
+                    keepUiVisible();
+                    setCurrentBrushSize(v);
+                  }}
+                  onSlidingComplete={(v: number) => {
+                    keepUiVisible();
+                    setCurrentBrushSize(v);
+                  }}
+                  minimumTrackTintColor="#6366f1"
+                  maximumTrackTintColor="#CBD5E1"
+                  thumbTintColor="#6366f1"
+                  accessibilityLabel="Brush size"
+                />
+              </View>
+            </View>
+          </View>
+          )}
+
           {/* Canvas area */}
           <TouchableOpacity
             style={[
@@ -729,92 +783,6 @@ export default function FullscreenCanvas({
 
           {/* Bottom dock removed; replaced by collapsible Tools panel below */}
 
-        {/* Left tools: collapsed handle -> expandable panel */}
-        {uiMode !== 'minimal' && (
-          <View 
-            style={[
-              styles.leftToolsHandleContainer,
-              {
-                top: Math.max(24, 32 + (insets?.top ?? 0)), // Positioned below the toolbar
-                left: Math.max(16, 20 + (insets?.left ?? 0)),
-                bottom: Math.max(48, 60 + (insets?.bottom ?? 0)), // Limited by bottom padding
-              }
-            ]} 
-            pointerEvents={'auto'}
-          >
-            {!toolsVisible ? (
-              <TouchableOpacity style={styles.leftToolsHandle} onPress={() => setToolsVisible(true)}>
-                <Feather name="chevron-right" size={16} color="#111827" />
-                <Text style={styles.toolsHandleText}>Tools</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.leftToolsPanel}>
-                <View style={styles.toolsColumn}>
-                  <TouchableOpacity
-                    style={[styles.toolChip, currentTool === 'brush' && styles.toolChipActive]}
-                    onPress={() => setCurrentTool('brush')}
-                  >
-                    <MaterialIcons name="brush" size={18} color="#ffffff" />
-                    <Text style={styles.toolChipText}>Paint</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.toolChip, currentTool === 'bucket' && styles.toolChipActive]}
-                    onPress={() => setCurrentTool('bucket')}
-                  >
-                    <MaterialIcons name="format-color-fill" size={18} color="#ffffff" />
-                    <Text style={styles.toolChipText}>Fill</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.toolChip, currentTool === 'eraser' && styles.toolChipActive]}
-                    onPress={() => setCurrentTool('eraser')}
-                  >
-                    <MaterialIcons name="auto-fix-off" size={18} color="#ffffff" />
-                    <Text style={styles.toolChipText}>Eraser</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.toolChip, currentTool === 'move' && styles.toolChipActive]}
-                    onPress={() => setCurrentTool('move')}
-                  >
-                    <Feather name="move" size={18} color="#ffffff" />
-                    <Text style={styles.toolChipText}>Move</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.toolChip} onPress={() => setShowColorPicker(true)}>
-                    <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
-                    <Text style={styles.toolChipText}>Color</Text>
-                  </TouchableOpacity>
-                  <View style={styles.sizeControlsColumn}>
-                    <Text style={styles.sizeLabel}>Size: {Math.round(currentBrushSize)}px</Text>
-                    <Slider
-                      key={`slider-${currentBrushSize}`}
-                      style={styles.verticalSizeSlider}
-                      minimumValue={2}
-                      maximumValue={50}
-                      value={currentBrushSize}
-                      step={1}
-                      onSlidingStart={keepUiVisible}
-                      onValueChange={(v: number) => {
-                        keepUiVisible();
-                        setCurrentBrushSize(v);
-                      }}
-                      onSlidingComplete={(v: number) => {
-                        keepUiVisible();
-                        setCurrentBrushSize(v);
-                      }}
-                      minimumTrackTintColor="#6366f1"
-                      maximumTrackTintColor="#CBD5E1"
-                      thumbTintColor="#6366f1"
-                      accessibilityLabel="Brush size"
-                      pointerEvents="auto"
-                    />
-                  </View>
-                  <TouchableOpacity style={styles.toolsCollapse} onPress={() => setToolsVisible(false)}>
-                    <Feather name="chevron-left" size={16} color="#111827" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-          </View>
-        )}
 
         {/* Radial floating actions (Save, Clear, Exit) - Positioned on the right */}
         <Animated.View
@@ -954,18 +922,31 @@ export default function FullscreenCanvas({
 const styles = StyleSheet.create({
   fullscreenContainer: {
     flex: 1,
-    backgroundColor: 'transparent', // Changed from '#000000' to transparent
+    backgroundColor: 'transparent',
   },
   safeArea: {
     flex: 1,
+    flexDirection: 'row', // Horizontal layout for sidebar and content
+  },
+  toolsSidebar: {
+    width: 120,
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(0, 0, 0, 0.1)',
+    padding: 12,
+    paddingTop: Platform.OS === 'ios' ? 0 : 12,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   canvasSection: {
-  flex: 1,
-  justifyContent: 'center',
-  alignItems: 'center',
-  paddingHorizontal: 0,
-  paddingVertical: 0,
-  paddingLeft: 120, // Add padding to accommodate the left tools panel
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   canvasSectionPaddedFull: {
     // Reserve space so overlays do not cover the drawable area (full UI)
@@ -979,14 +960,20 @@ const styles = StyleSheet.create({
   },
   canvasContainer: {
     backgroundColor: '#ffffff',
-    borderRadius: 0,
+    borderRadius: 16,
     overflow: 'hidden',
     width: '100%',
     height: '100%',
-    maxWidth: '100%',
-    maxHeight: '100%',
+    maxWidth: '95%',
+    maxHeight: '95%',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    margin: 16,
   },
   emptyCanvas: {
     backgroundColor: '#f8fafc',
@@ -1129,46 +1116,6 @@ const styles = StyleSheet.create({
     borderColor: '#ffffff',
   },
   
-  // Left Collapsible Tools panel
-  leftToolsHandleContainer: {
-    position: 'absolute',
-    top: 100, // Positioned below the toolbar
-    left: 16, // Will be overridden with safe area insets
-    bottom: 60, // Will be overridden with safe area insets
-    alignItems: 'flex-start',
-    zIndex: 12,
-  },
-  leftToolsHandle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  toolsHandleText: {
-    color: '#111827',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  leftToolsPanel: {
-    backgroundColor: 'rgba(255,255,255,0.98)',
-    borderRadius: 16,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 12,
-    maxHeight: '80%',
-    width: 100, // Fixed width for the vertical tools panel
-  },
   toolsColumn: {
     flexDirection: 'column',
     alignItems: 'center',
@@ -1210,13 +1157,6 @@ const styles = StyleSheet.create({
     width: '90%',
     height: 30,
     marginVertical: 8,
-  },
-  toolsCollapse: {
-    padding: 6, // Reduced padding
-    backgroundColor: 'rgba(226,232,240,0.9)',
-    borderRadius: 14,
-    width: '100%',
-    alignItems: 'center',
   },
 
   // Bottom dock - tools row
