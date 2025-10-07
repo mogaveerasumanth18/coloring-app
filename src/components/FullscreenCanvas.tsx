@@ -805,7 +805,7 @@ export default function FullscreenCanvas({
                 {
                   opacity: fabAnim,
                   transform: [
-                    { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -84] }) }, // Reduced from -112
+                    { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -90] }) }, // Adjusted for better spacing
                     { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
                   ],
                 },
@@ -823,8 +823,8 @@ export default function FullscreenCanvas({
                 {
                   opacity: fabAnim,
                   transform: [
-                    { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -68] }) }, // Reduced from -88
-                    { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -68] }) }, // Reduced from -88
+                    { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -75] }) }, // Adjusted for better spacing
+                    { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -75] }) }, // Adjusted for better spacing
                     { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
                   ],
                 },
@@ -842,7 +842,7 @@ export default function FullscreenCanvas({
                 {
                   opacity: fabAnim,
                   transform: [
-                    { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -96] }) }, // Reduced from -120
+                    { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -105] }) }, // Adjusted for better spacing
                     { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
                   ],
                 },
@@ -998,22 +998,22 @@ const styles = StyleSheet.create({
     top: 24, // Will be overridden with safe area insets
     left: 16,
     zIndex: 10,
-    gap: 6, // Increased gap for better spacing
+    gap: 10, // Increased gap for better spacing
   },
   actionColumn: {
     flexDirection: 'column',
     alignItems: 'flex-start',
-    gap: 8, // Reduced from 12 to prevent overflow
+    gap: 10, // Increased gap to prevent overflow
     flexWrap: 'wrap',
   },
   actionButton: {
     backgroundColor: '#6366f1',
-    borderRadius: 18, // Reduced radius
-    paddingHorizontal: 12, // Reduced padding
-    paddingVertical: 6, // Reduced padding
+    borderRadius: 20, // Increased radius for better touch target
+    paddingHorizontal: 16, // Increased padding
+    paddingVertical: 8, // Increased padding
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4, // Reduced gap
+    gap: 8, // Increased gap
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
@@ -1022,19 +1022,19 @@ const styles = StyleSheet.create({
   },
   smallActionButton: {
     backgroundColor: '#6366f1',
-    borderRadius: 12, // Further reduced radius
-    paddingHorizontal: 4, // Further reduced padding
-    paddingVertical: 3, // Further reduced padding
+    borderRadius: 16, // Increased radius
+    paddingHorizontal: 8, // Increased padding
+    paddingVertical: 6, // Increased padding
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 1, // Further reduced gap
+    gap: 4, // Increased gap
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.15,
     shadowRadius: 2,
     elevation: 2,
-    minWidth: 28, // Further reduced minimum touch target
-    minHeight: 28, // Further reduced minimum touch target
+    minWidth: 36, // Increased minimum touch target
+    minHeight: 36, // Increased minimum touch target
   },
   activeActionButton: {
     backgroundColor: '#4f46e5',
@@ -1042,19 +1042,19 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 13, // Slightly larger font
     fontWeight: '600',
   },
   zoomIndicator: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 8, // Further reduced radius
-    paddingHorizontal: 4, // Further reduced padding
-    paddingVertical: 2, // Further reduced padding
-    minWidth: 36, // Further reduced minimum width
+    borderRadius: 10, // Increased radius
+    paddingHorizontal: 6, // Increased padding
+    paddingVertical: 4, // Increased padding
+    minWidth: 40, // Increased minimum width
   },
   zoomText: {
     color: '#1f2937',
-    fontSize: 12, // Smaller font
+    fontSize: 13, // Slightly larger font
     fontWeight: '700',
   },
   // Zoom slider overlay removed
@@ -1071,9 +1071,9 @@ const styles = StyleSheet.create({
   },
   sizeLabel: {
     color: '#1f2937',
-    fontSize: 11, // Increased font size for better readability
+    fontSize: 13, // Increased font size for better readability
     fontWeight: '600',
-    minWidth: 60, // Increased width for better spacing
+    minWidth: 70, // Increased width for better spacing
   },
   sizeIndicator: {
     width: 24,
@@ -1136,12 +1136,12 @@ const styles = StyleSheet.create({
   toolChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4, // Increased gap for better spacing
+    gap: 8, // Increased gap for better spacing
     backgroundColor: '#9ca3af',
-    borderRadius: 14, // Smaller radius
-    paddingHorizontal: 8, // Reduced padding
-    paddingVertical: 6, // Reduced padding
-    minHeight: 32, // Ensure minimum touch target
+    borderRadius: 18, // Increased radius
+    paddingHorizontal: 12, // Increased padding
+    paddingVertical: 8, // Increased padding
+    minHeight: 40, // Ensure minimum touch target
     width: '100%',
     justifyContent: 'center',
   },
@@ -1150,7 +1150,7 @@ const styles = StyleSheet.create({
   },
   toolChipText: {
     color: '#ffffff',
-    fontSize: 11, // Increased font size for better readability
+    fontSize: 13, // Increased font size for better readability
     fontWeight: '700',
   },
   verticalSizeSlider: {
@@ -1325,8 +1325,8 @@ const styles = StyleSheet.create({
   // Radial FAB menu
   rightFabContainer: {
     position: 'absolute',
-    bottom: 24,
-    right: 28, // offset from right to avoid nav bar
+    bottom: 40, // Increased padding
+    right: 40, // Increased padding
     alignItems: 'flex-end',
     justifyContent: 'flex-end',
     zIndex: 20,
