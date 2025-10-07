@@ -628,20 +628,19 @@ export default function FullscreenCanvas({
           </View>
         </TouchableOpacity>
 
-        {/* Top toolbar */}
+        {/* Left sidebar toolbar */}
         <Animated.View
           style={[
-            styles.topActionsContainer, 
+            styles.leftActionsContainer, 
             { 
               opacity: uiOpacityAnim,
               top: Math.max(24, 32 + (insets?.top ?? 0)),
               left: Math.max(16, 20 + (insets?.left ?? 0)),
-              right: Math.max(16, 20 + (insets?.right ?? 0)),
             }
           ]}
           pointerEvents={uiVisible ? 'auto' : 'none'}
         >
-          <View style={styles.actionRow}>
+          <View style={styles.actionColumn}>
             {uiMode !== 'minimal' && (
               <>
                 <TouchableOpacity
@@ -723,7 +722,7 @@ export default function FullscreenCanvas({
                   outputRange: [1, 0], // Inverse of UI visibility
                 }),
                 top: Math.max(24, 32 + (insets?.top ?? 0)),
-                right: Math.max(20, 24 + (insets?.right ?? 0)),
+                left: Math.max(20, 24 + (insets?.left ?? 0)),
               }
             ]}
           >
@@ -740,27 +739,27 @@ export default function FullscreenCanvas({
 
   {/* Bottom dock removed; replaced by collapsible Tools panel below */}
 
-        {/* Bottom tools: collapsed handle -> expandable panel */}
+        {/* Left tools: collapsed handle -> expandable panel */}
         {uiMode !== 'minimal' && (
           <View 
             style={[
-              styles.toolsHandleContainer,
+              styles.leftToolsHandleContainer,
               {
-                bottom: Math.max(48, 60 + (insets?.bottom ?? 0)), // Increased padding to match FAB
+                top: Math.max(24, 32 + (insets?.top ?? 0)), // Positioned below the toolbar
                 left: Math.max(16, 20 + (insets?.left ?? 0)),
-                right: Math.max(16, 20 + (insets?.right ?? 0)),
+                bottom: Math.max(48, 60 + (insets?.bottom ?? 0)), // Limited by bottom padding
               }
             ]} 
             pointerEvents={'auto'}
           >
             {!toolsVisible ? (
-              <TouchableOpacity style={styles.toolsHandle} onPress={() => setToolsVisible(true)}>
-                <Feather name="chevron-up" size={16} color="#111827" />
+              <TouchableOpacity style={styles.leftToolsHandle} onPress={() => setToolsVisible(true)}>
+                <Feather name="chevron-right" size={16} color="#111827" />
                 <Text style={styles.toolsHandleText}>Tools</Text>
               </TouchableOpacity>
             ) : (
-              <View style={styles.toolsPanel}>
-                <View style={styles.toolsRow}>
+              <View style={styles.leftToolsPanel}>
+                <View style={styles.toolsColumn}>
                   <TouchableOpacity
                     style={[styles.toolChip, currentTool === 'brush' && styles.toolChipActive]}
                     onPress={() => setCurrentTool('brush')}
@@ -793,44 +792,47 @@ export default function FullscreenCanvas({
                     <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
                     <Text style={styles.toolChipText}>Color</Text>
                   </TouchableOpacity>
-                </View>
-                <View style={styles.toolsRow}>
-                  <Text style={styles.sizeLabel}>Size: {Math.round(currentBrushSize)}px</Text>
-                  <Slider
-                    key={`slider-${currentBrushSize}`}
-                    style={styles.sizeSlider}
-                    minimumValue={2}
-                    maximumValue={50}
-                    value={currentBrushSize}
-                    step={1}
-                    onSlidingStart={keepUiVisible}
-                    onValueChange={(v: number) => {
-                      keepUiVisible();
-                      setCurrentBrushSize(v);
-                    }}
-                    onSlidingComplete={(v: number) => {
-                      keepUiVisible();
-                      setCurrentBrushSize(v);
-                    }}
-                    minimumTrackTintColor="#6366f1"
-                    maximumTrackTintColor="#CBD5E1"
-                    thumbTintColor="#6366f1"
-                    accessibilityLabel="Brush size"
-                    pointerEvents="auto"
-                  />
+                  <View style={styles.sizeControlsColumn}>
+                    <Text style={styles.sizeLabel}>Size: {Math.round(currentBrushSize)}px</Text>
+                    <Slider
+                      key={`slider-${currentBrushSize}`}
+                      style={styles.verticalSizeSlider}
+                      minimumValue={2}
+                      maximumValue={50}
+                      value={currentBrushSize}
+                      step={1}
+                      onSlidingStart={keepUiVisible}
+                      onValueChange={(v: number) => {
+                        keepUiVisible();
+                        setCurrentBrushSize(v);
+                      }}
+                      onSlidingComplete={(v: number) => {
+                        keepUiVisible();
+                        setCurrentBrushSize(v);
+                      }}
+                      minimumTrackTintColor="#6366f1"
+                      maximumTrackTintColor="#CBD5E1"
+                      thumbTintColor="#6366f1"
+                      accessibilityLabel="Brush size"
+                      pointerEvents="auto"
+                    />
+                  </View>
                   <TouchableOpacity style={styles.toolsCollapse} onPress={() => setToolsVisible(false)}>
-                    <Feather name="chevron-down" size={16} color="#111827" />
+                    <Feather name="chevron-left" size={16} color="#111827" />
                   </TouchableOpacity>
                 </View>
               </View>
             )}
           </View>
         )}
+            )}
+          </View>
+        )}
 
-        {/* Radial floating actions (Save, Clear, Exit) */}
+        {/* Radial floating actions (Save, Clear, Exit) - Positioned on the right */}
         <Animated.View
           style={[
-            styles.fabContainer,
+            styles.rightFabContainer,
             {
               opacity: uiVisible || fabOpen ? uiOpacityAnim : 0,
               bottom: Math.max(48, 60 + (insets?.bottom ?? 0)), // Increased padding significantly
@@ -979,6 +981,7 @@ const styles = StyleSheet.create({
   alignItems: 'center',
   paddingHorizontal: 0,
   paddingVertical: 0,
+  paddingLeft: 120, // Add padding to accommodate the left tools panel
   },
   canvasSectionPaddedFull: {
     // Reserve space so overlays do not cover the drawable area (full UI)
@@ -1019,20 +1022,18 @@ const styles = StyleSheet.create({
   },
   
   // Top toolbar
-  topActionsContainer: {
+  leftActionsContainer: {
     position: 'absolute',
     top: 24, // Will be overridden with safe area insets
     left: 16,
-    right: 16, // Reduced from 40 to give more space, will be overridden with safe area insets
     zIndex: 10,
     gap: 12,
   },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  actionColumn: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
     gap: 8, // Reduced from 12 to prevent overflow
     flexWrap: 'wrap',
-    justifyContent: 'flex-start', // Better alignment on mobile
   },
   actionButton: {
     backgroundColor: '#6366f1',
@@ -1143,16 +1144,16 @@ const styles = StyleSheet.create({
     borderColor: '#ffffff',
   },
   
-  // Collapsible Tools panel
-  toolsHandleContainer: {
+  // Left Collapsible Tools panel
+  leftToolsHandleContainer: {
     position: 'absolute',
-    bottom: 24, // Will be overridden with safe area insets
+    top: 100, // Positioned below the toolbar
     left: 16, // Will be overridden with safe area insets
-    right: 16, // Will be overridden with safe area insets
-    alignItems: 'center',
+    bottom: 60, // Will be overridden with safe area insets
+    alignItems: 'flex-start',
     zIndex: 12,
   },
-  toolsHandle: {
+  leftToolsHandle: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -1171,24 +1172,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  toolsPanel: {
+  leftToolsPanel: {
     backgroundColor: 'rgba(255,255,255,0.98)',
     borderRadius: 16,
     padding: 12,
-    marginHorizontal: 8, // Reduced from 16 to prevent overflow on small screens
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
     shadowRadius: 12,
     elevation: 12,
+    maxHeight: '80%',
+    width: 100, // Fixed width for the vertical tools panel
   },
-  toolsRow: {
-    flexDirection: 'row',
+  toolsColumn: {
+    flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     gap: 8, // Reduced from 10 for mobile
     marginVertical: 4,
-    flexWrap: 'wrap', // Allow wrapping on small screens
+    width: '100%',
+  },
+  sizeControlsColumn: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginVertical: 4,
+    width: '100%',
+    paddingVertical: 8,
   },
   toolChip: {
     flexDirection: 'row',
@@ -1199,6 +1210,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, // Reduced padding
     paddingVertical: 6, // Reduced padding
     minHeight: 32, // Ensure minimum touch target
+    width: '100%',
+    justifyContent: 'center',
   },
   toolChipActive: {
     backgroundColor: '#6366f1',
@@ -1208,15 +1221,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  sizeSlider: {
-    flex: 1,
-    height: 32,
-    marginHorizontal: 8,
+  verticalSizeSlider: {
+    width: '90%',
+    height: 30,
+    marginVertical: 8,
   },
   toolsCollapse: {
     padding: 8,
     backgroundColor: 'rgba(226,232,240,0.9)',
     borderRadius: 14,
+    width: '100%',
+    alignItems: 'center',
   },
   
   // Bottom dock - tools row
@@ -1383,7 +1398,7 @@ const styles = StyleSheet.create({
   },
 
   // Radial FAB menu
-  fabContainer: {
+  rightFabContainer: {
     position: 'absolute',
     bottom: 24,
     right: 28, // offset from right to avoid nav bar
