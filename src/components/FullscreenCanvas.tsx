@@ -186,8 +186,6 @@ const CustomColorPicker = ({
           discrete={false}
           useNativeDriver={true}
           useNativeLayout={false}
-          gapSize={0}
-          autoResetSlider={false}
         />
       </View>
     </View>
@@ -234,9 +232,10 @@ export default function FullscreenCanvas({
   const [uiMode, setUiMode] = useState<'full' | 'compact' | 'minimal'>('compact');
   // Removed the temporary zoom slider overlay to reduce clutter
   const [toolsVisible, setToolsVisible] = useState(false); // bottom tools panel collapsed by default
-  // Removed radial FAB menu - actions integrated into tools panel
+  const [fabOpen, setFabOpen] = useState(false);
   // UI visibility animation
   const uiOpacityAnim = useRef(new Animated.Value(1)).current;
+  const fabAnim = useRef(new Animated.Value(0)).current;
 
   // Pan and zoom gesture handling for move tool
   const translateX = useSharedValue(0);
@@ -816,9 +815,6 @@ export default function FullscreenCanvas({
             )}
           </View>
         )}
-            )}
-          </View>
-        )}
 
         {/* Radial floating actions (Save, Clear, Exit) - Positioned on the right */}
         <Animated.View
@@ -897,65 +893,62 @@ export default function FullscreenCanvas({
             <Feather name={fabOpen ? 'x' : 'grid'} size={20} color="#ffffff" />
           </TouchableOpacity>
         </Animated.View>
-
-  {/* UI mode toggle chip removed in favor of toolbar button */}
       </SafeAreaView>
-
-        {/* Color Picker Modal */}
-        <Modal
-          visible={showColorPicker}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowColorPicker(false)}
-        >
-          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowColorPicker(false)}>
-            <View style={styles.colorPickerModal}>
-              <Text style={styles.colorPickerTitle}>Pick a Color</Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Predefined color swatches */}
-                <View style={styles.colorGrid}>
-                  {colors.map((color) => (
-                    <TouchableOpacity
-                      key={color}
-                      style={[
-                        styles.colorOption,
-                        { backgroundColor: color },
-                        currentColor === color && styles.selectedColorOption,
-                      ]}
-                      onPress={() => {
-                        setCurrentColor(color);
-                        setShowColorPicker(false);
-                      }}
-                    />
-                  ))}
-                </View>
-
-                {/* Custom color picker with spectrum */}
-                <View style={{
-                  backgroundColor: 'white',
-                  borderRadius: 12,
-                  padding: 16,
-                  marginTop: 16,
-                  elevation: 4,
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4
-                }}>
-                  <CustomColorPicker
-                    selectedColor={currentColor}
-                    onColorChange={(color) => {
+      {/* Color Picker Modal */}
+      <Modal
+        visible={showColorPicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowColorPicker(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowColorPicker(false)}>
+          <View style={styles.colorPickerModal}>
+            <Text style={styles.colorPickerTitle}>Pick a Color</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Predefined color swatches */}
+              <View style={styles.colorGrid}>
+                {colors.map((color) => (
+                  <TouchableOpacity
+                    key={color}
+                    style={[
+                      styles.colorOption,
+                      { backgroundColor: color },
+                      currentColor === color && styles.selectedColorOption,
+                    ]}
+                    onPress={() => {
                       setCurrentColor(color);
                       setShowColorPicker(false);
                     }}
                   />
-                </View>
-              </ScrollView>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-      </View>
-    </Modal>
-  );
+                ))}
+              </View>
+
+              {/* Custom color picker with spectrum */}
+              <View style={{
+                backgroundColor: 'white',
+                borderRadius: 12,
+                padding: 16,
+                marginTop: 16,
+                elevation: 4,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4
+              }}>
+                <CustomColorPicker
+                  selectedColor={currentColor}
+                  onColorChange={(color) => {
+                    setCurrentColor(color);
+                    setShowColorPicker(false);
+                  }}
+                />
+              </View>
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  </Modal>
+);
 }
 
 const styles = StyleSheet.create({
