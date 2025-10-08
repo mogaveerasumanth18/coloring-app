@@ -229,11 +229,8 @@ export default function FullscreenCanvas({
   const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
   const [uiVisible, setUiVisible] = useState(true);
   // UI density modes to control how much chrome is shown
-  const [uiMode, setUiMode] = useState<'full' | 'compact' | 'minimal'>('compact');
-  const [fabOpen, setFabOpen] = useState(false);
   // UI visibility animation
   const uiOpacityAnim = useRef(new Animated.Value(1)).current;
-  const fabAnim = useRef(new Animated.Value(0)).current;
 
   // Pan and zoom gesture handling for move tool
   const translateX = useSharedValue(0);
@@ -305,15 +302,6 @@ export default function FullscreenCanvas({
     };
   });
 
-  // FAB animation
-  useEffect(() => {
-    Animated.timing(fabAnim, {
-      toValue: fabOpen ? 1 : 0,
-      duration: 250,
-      easing: Easing.bezier(0.4, 0.0, 0.2, 1),
-      useNativeDriver: false,
-    }).start();
-  }, [fabOpen, fabAnim]);
 
   // Animate UI visibility changes
   useEffect(() => {
@@ -361,11 +349,6 @@ export default function FullscreenCanvas({
     startAutoHideTimer();
   };
 
-  const cycleUiMode = () => {
-    setUiVisible(true);
-    setUiMode((m) => (m === 'full' ? 'compact' : m === 'compact' ? 'minimal' : 'full'));
-    startAutoHideTimer();
-  };
 
   // Function to keep UI visible when interacting with tools
   const keepUiVisible = () => {
@@ -623,182 +606,163 @@ export default function FullscreenCanvas({
           pointerEvents={uiVisible ? 'auto' : 'none'}
         >
           <View style={styles.actionColumn}>
-            {uiMode !== 'minimal' && (
-              <>
-                {/* Tool Selection */}
-                <TouchableOpacity
-                  style={[
-                    uiMode === 'compact' ? styles.smallActionButton : styles.actionButton,
-                    currentTool === 'brush' && styles.activeActionButton
-                  ]}
-                  onPress={() => {
-                    setCurrentTool('brush');
-                    keepUiVisible();
-                  }}
-                >
-                  <Feather name="edit-3" size={18} color="#ffffff" />
-                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Brush</Text>}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    uiMode === 'compact' ? styles.smallActionButton : styles.actionButton,
-                    currentTool === 'bucket' && styles.activeActionButton
-                  ]}
-                  onPress={() => {
-                    setCurrentTool('bucket');
-                    keepUiVisible();
-                  }}
-                >
-                  <Feather name="droplet" size={18} color="#ffffff" />
-                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Fill</Text>}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    uiMode === 'compact' ? styles.smallActionButton : styles.actionButton,
-                    currentTool === 'eraser' && styles.activeActionButton
-                  ]}
-                  onPress={() => {
-                    setCurrentTool('eraser');
-                    keepUiVisible();
-                  }}
-                >
-                  <Feather name="square" size={18} color="#ffffff" />
-                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Eraser</Text>}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    uiMode === 'compact' ? styles.smallActionButton : styles.actionButton,
-                    currentTool === 'move' && styles.activeActionButton
-                  ]}
-                  onPress={() => {
-                    setCurrentTool('move');
-                    keepUiVisible();
-                  }}
-                >
-                  <Feather name="move" size={18} color="#ffffff" />
-                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Move</Text>}
-                </TouchableOpacity>
-
-                {/* Brush Size Control */}
-                {(uiMode === 'full' || uiMode === 'compact') && (
-                  <View style={styles.sizeControl}>
-                    <Text style={styles.sizeLabel}>Size: {Math.round(currentBrushSize)}px</Text>
-                    <View style={styles.sizeSliderContainer}>
-                      <Slider
-                        style={styles.sizeSlider}
-                        value={currentBrushSize}
-                        onValueChange={setCurrentBrushSize}
-                        minimumValue={2}
-                        maximumValue={50}
-                        step={1}
-                        minimumTrackTintColor="#6366f1"
-                        maximumTrackTintColor="#e5e7eb"
-                        onSlidingStart={keepUiVisible}
-                      />
-                    </View>
-                    <View style={styles.sizeIndicator}>
-                      <View style={[styles.sizeDot, { width: Math.min(currentBrushSize / 2, 20), height: Math.min(currentBrushSize / 2, 20) }]} />
-                    </View>
-                  </View>
-                )}
-
-                {/* Color Picker Button */}
-                <TouchableOpacity
-                  style={uiMode === 'compact' ? styles.smallActionButton : styles.colorPickerButton}
-                  onPress={() => {
-                    setShowColorPicker(true);
-                    keepUiVisible();
-                  }}
-                >
-                  <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
-                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Color</Text>}
-                </TouchableOpacity>
-
-                {/* Undo/Redo */}
-                <TouchableOpacity
-                  style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-                  onPress={() => {
-                    canvasRef.current?.undo?.();
-                    keepUiVisible();
-                  }}
-                >
-                  <Ionicons name="arrow-undo" size={18} color="#ffffff" />
-                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Undo</Text>}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-                  onPress={() => {
-                    canvasRef.current?.redo?.();
-                    keepUiVisible();
-                  }}
-                >
-                  <Ionicons name="arrow-redo" size={18} color="#ffffff" />
-                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Redo</Text>}
-                </TouchableOpacity>
-
-                {/* Zoom Controls */}
-                <TouchableOpacity
-                  style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-                  onPress={() => {
-                    updateZoom(zoom + 0.25);
-                    keepUiVisible();
-                  }}
-                >
-                  <Feather name="zoom-in" size={18} color="#ffffff" />
-                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Zoom In</Text>}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-                  onPress={() => {
-                    updateZoom(zoom - 0.25);
-                    keepUiVisible();
-                  }}
-                >
-                  <Feather name="zoom-out" size={18} color="#ffffff" />
-                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Zoom Out</Text>}
-                </TouchableOpacity>
-                <View style={styles.zoomIndicator}>
-                  <Text style={styles.zoomText}>{Math.round(zoom * 100)}%</Text>
-                </View>
-                <TouchableOpacity
-                  style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-                  onPress={() => {
-                    updateZoom(1);
-                    keepUiVisible();
-                  }}
-                >
-                  <Feather name="refresh-ccw" size={18} color="#ffffff" />
-                  {uiMode === 'full' && <Text style={styles.actionButtonText}>Reset</Text>}
-                </TouchableOpacity>
-              </>
-            )}
-            {/* UI toggle and mode cycle buttons */}
+            {/* Tool Selection */}
             <TouchableOpacity
-              style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
+              style={[
+                styles.actionButton,
+                currentTool === 'brush' && styles.activeActionButton
+              ]}
+              onPress={() => {
+                setCurrentTool('brush');
+                keepUiVisible();
+              }}
+            >
+              <Feather name="edit-3" size={18} color="#ffffff" />
+              <Text style={styles.actionButtonText}>Brush</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                currentTool === 'bucket' && styles.activeActionButton
+              ]}
+              onPress={() => {
+                setCurrentTool('bucket');
+                keepUiVisible();
+              }}
+            >
+              <Feather name="droplet" size={18} color="#ffffff" />
+              <Text style={styles.actionButtonText}>Fill</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                currentTool === 'eraser' && styles.activeActionButton
+              ]}
+              onPress={() => {
+                setCurrentTool('eraser');
+                keepUiVisible();
+              }}
+            >
+              <Feather name="square" size={18} color="#ffffff" />
+              <Text style={styles.actionButtonText}>Eraser</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                currentTool === 'move' && styles.activeActionButton
+              ]}
+              onPress={() => {
+                setCurrentTool('move');
+                keepUiVisible();
+              }}
+            >
+              <Feather name="move" size={18} color="#ffffff" />
+              <Text style={styles.actionButtonText}>Move</Text>
+            </TouchableOpacity>
+
+            {/* Brush Size Control */}
+            <View style={styles.sizeControl}>
+              <Text style={styles.sizeLabel}>Size: {Math.round(currentBrushSize)}px</Text>
+              <View style={styles.sizeSliderContainer}>
+                <Slider
+                  style={styles.sizeSlider}
+                  value={currentBrushSize}
+                  onValueChange={setCurrentBrushSize}
+                  minimumValue={2}
+                  maximumValue={50}
+                  step={1}
+                  minimumTrackTintColor="#6366f1"
+                  maximumTrackTintColor="#e5e7eb"
+                  onSlidingStart={keepUiVisible}
+                />
+              </View>
+              <View style={styles.sizeIndicator}>
+                <View style={[styles.sizeDot, { width: Math.min(currentBrushSize / 2, 20), height: Math.min(currentBrushSize / 2, 20) }]} />
+              </View>
+            </View>
+
+            {/* Color Picker Button */}
+            <TouchableOpacity
+              style={styles.colorPickerButton}
+              onPress={() => {
+                setShowColorPicker(true);
+                keepUiVisible();
+              }}
+            >
+              <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
+              <Text style={styles.actionButtonText}>Color</Text>
+            </TouchableOpacity>
+
+            {/* Undo/Redo */}
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => {
+                canvasRef.current?.undo?.();
+                keepUiVisible();
+              }}
+            >
+              <Ionicons name="arrow-undo" size={18} color="#ffffff" />
+              <Text style={styles.actionButtonText}>Undo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => {
+                canvasRef.current?.redo?.();
+                keepUiVisible();
+              }}
+            >
+              <Ionicons name="arrow-redo" size={18} color="#ffffff" />
+              <Text style={styles.actionButtonText}>Redo</Text>
+            </TouchableOpacity>
+
+            {/* Zoom Controls */}
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => {
+                updateZoom(zoom + 0.25);
+                keepUiVisible();
+              }}
+            >
+              <Feather name="zoom-in" size={18} color="#ffffff" />
+              <Text style={styles.actionButtonText}>Zoom In</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => {
+                updateZoom(zoom - 0.25);
+                keepUiVisible();
+              }}
+            >
+              <Feather name="zoom-out" size={18} color="#ffffff" />
+              <Text style={styles.actionButtonText}>Zoom Out</Text>
+            </TouchableOpacity>
+            <View style={styles.zoomIndicator}>
+              <Text style={styles.zoomText}>{Math.round(zoom * 100)}%</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => {
+                updateZoom(1);
+                keepUiVisible();
+              }}
+            >
+              <Feather name="refresh-ccw" size={18} color="#ffffff" />
+              <Text style={styles.actionButtonText}>Reset</Text>
+            </TouchableOpacity>
+
+            {/* UI toggle button */}
+            <TouchableOpacity
+              style={styles.actionButton}
               onPress={() => setUiVisible((v) => !v)}
               activeOpacity={0.9}
             >
               <Feather name={uiVisible ? 'eye' : 'eye-off'} size={18} color="#ffffff" />
-              {uiMode === 'full' && (
-                <Text style={styles.actionButtonText}>
-                  {uiVisible ? 'Hide' : 'Show'}
-                </Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={uiMode === 'compact' ? styles.smallActionButton : styles.actionButton}
-              onPress={cycleUiMode}
-              activeOpacity={0.9}
-            >
-              <Feather name="layout" size={18} color="#ffffff" />
-              {uiMode === 'full' && (
-                <Text style={styles.actionButtonText}>
-                  {uiMode}
-                </Text>
-              )}
+              <Text style={styles.actionButtonText}>
+                {uiVisible ? 'Hide' : 'Show'}
+              </Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -829,131 +793,52 @@ export default function FullscreenCanvas({
           </Animated.View>
         )}
 
-          {/* Color Palette - Bottom area */}
-          {uiMode !== 'minimal' && (
-            <Animated.View
-              style={[
-                styles.colorPaletteContainer,
-                {
-                  opacity: uiOpacityAnim,
-                  bottom: Math.max(140, 160 + (insets?.bottom ?? 0)),
-                  left: 16,
-                  right: 100, // Leave space for FAB menu
-                }
-              ]}
-              pointerEvents={uiVisible ? 'auto' : 'none'}
-            >
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.colorPalette}
-              >
-                {colors.slice(0, 12).map((color) => (
-                  <TouchableOpacity
-                    key={color}
-                    style={[
-                      styles.colorPaletteItem,
-                      { backgroundColor: color },
-                      currentColor === color && styles.selectedColorPaletteItem,
-                    ]}
-                    onPress={() => {
-                      setCurrentColor(color);
-                      keepUiVisible();
-                    }}
-                    activeOpacity={0.8}
-                  />
-                ))}
-                {/* Show more colors button */}
-                <TouchableOpacity
-                  style={styles.colorPaletteItem}
-                  onPress={() => {
-                    setShowColorPicker(true);
-                    keepUiVisible();
-                  }}
-                >
-                  <Feather name="more-horizontal" size={16} color="#ffffff" />
-                </TouchableOpacity>
-              </ScrollView>
-            </Animated.View>
-          )}
-
-        {/* Radial floating actions (Save, Clear, Exit) - Positioned on the right */}
+        {/* Color Palette - Bottom area */}
         <Animated.View
           style={[
-            styles.rightFabContainer,
+            styles.colorPaletteContainer,
             {
-              opacity: uiVisible || fabOpen ? uiOpacityAnim : 0,
-              bottom: Math.max(48, 60 + (insets?.bottom ?? 0)), // Increased padding significantly
-              right: Math.max(32, 40 + (insets?.right ?? 0)), // Increased right padding too
-            },
+              opacity: uiOpacityAnim,
+              bottom: Math.max(140, 160 + (insets?.bottom ?? 0)),
+              left: 16,
+              right: 16,
+            }
           ]}
-          pointerEvents={uiVisible || fabOpen ? 'auto' : 'none'}
+          pointerEvents={uiVisible ? 'auto' : 'none'}
         >
-          {/* Animated radial items */}
-          <Animated.View pointerEvents={fabOpen ? 'auto' : 'none'}>
-            <Animated.View
-              style={[
-                styles.fabItem,
-                styles.fabSave,
-                {
-                  opacity: fabAnim,
-                  transform: [
-                    { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -90] }) }, // Adjusted for better spacing
-                    { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
-                  ],
-                },
-              ]}
-            >
-              <TouchableOpacity onPress={handleSave} activeOpacity={0.85}>
-                <Feather name="save" size={18} color="#ffffff" />
-              </TouchableOpacity>
-            </Animated.View>
-
-            <Animated.View
-              style={[
-                styles.fabItem,
-                styles.fabClear,
-                {
-                  opacity: fabAnim,
-                  transform: [
-                    { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -75] }) }, // Adjusted for better spacing
-                    { translateY: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -75] }) }, // Adjusted for better spacing
-                    { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
-                  ],
-                },
-              ]}
-            >
-              <TouchableOpacity onPress={handleClear} activeOpacity={0.85}>
-                <Feather name="trash-2" size={18} color="#ffffff" />
-              </TouchableOpacity>
-            </Animated.View>
-
-            <Animated.View
-              style={[
-                styles.fabItem,
-                styles.fabExit,
-                {
-                  opacity: fabAnim,
-                  transform: [
-                    { translateX: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -105] }) }, // Adjusted for better spacing
-                    { scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
-                  ],
-                },
-              ]}
-            >
-              <TouchableOpacity onPress={handleClose} activeOpacity={0.85}>
-                <Feather name="x" size={18} color="#ffffff" />
-              </TouchableOpacity>
-            </Animated.View>
-          </Animated.View>
-          <TouchableOpacity
-            onPress={() => setFabOpen((v) => !v)}
-            activeOpacity={0.9}
-            style={[styles.fabMain, fabOpen && styles.fabMainOpen]}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.colorPalette}
           >
-            <Feather name={fabOpen ? 'x' : 'grid'} size={20} color="#ffffff" />
-          </TouchableOpacity>
+            {colors.slice(0, 12).map((color) => (
+              <TouchableOpacity
+                key={color}
+                style={[
+                  styles.colorPaletteItem,
+                  { backgroundColor: color },
+                  currentColor === color && styles.selectedColorPaletteItem,
+                ]}
+                onPress={() => {
+                  setCurrentColor(color);
+                  keepUiVisible();
+                }}
+                activeOpacity={0.8}
+              />
+            ))}
+            {/* Show more colors button */}
+            <TouchableOpacity
+              style={styles.colorPaletteItem}
+              onPress={() => {
+                setShowColorPicker(true);
+                keepUiVisible();
+              }}
+            >
+              <Feather name="more-horizontal" size={16} color="#ffffff" />
+            </TouchableOpacity>
+          </ScrollView>
         </Animated.View>
+
       </SafeAreaView>
       {/* Color Picker Modal */}
       <Modal
@@ -1021,35 +906,12 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row', // Horizontal layout for sidebar and content
   },
-  toolsSidebar: {
-    width: 120,
-    backgroundColor: 'rgba(255, 255, 255, 0.98)',
-    borderRightWidth: 1,
-    borderRightColor: 'rgba(0, 0, 0, 0.1)',
-    padding: 12,
-    paddingTop: Platform.OS === 'ios' ? 0 : 12,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
   canvasSection: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 0,
     paddingVertical: 0,
-  },
-  canvasSectionPaddedFull: {
-    // Reserve space so overlays do not cover the drawable area (full UI)
-    paddingTop: 56,
-    paddingBottom: 100,
-  },
-  canvasSectionPaddedCompact: {
-    // Smaller paddings in compact UI
-    paddingTop: 36,
-    paddingBottom: 80,
   },
   canvasContainer: {
     backgroundColor: '#ffffff',
@@ -1112,22 +974,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 6,
     elevation: 6,
-  },
-  smallActionButton: {
-    backgroundColor: '#6366f1',
-    borderRadius: 16, // Increased radius
-    paddingHorizontal: 8, // Increased padding
-    paddingVertical: 6, // Increased padding
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4, // Increased gap
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
-    minWidth: 36, // Increased minimum touch target
-    minHeight: 36, // Increased minimum touch target
   },
   activeActionButton: {
     backgroundColor: '#4f46e5',
@@ -1217,134 +1063,7 @@ const styles = StyleSheet.create({
     borderColor: '#ffffff',
   },
   
-  toolsColumn: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 8, // Reduced from 10 for mobile
-    marginVertical: 4,
-    width: '100%',
-  },
-  sizeControlsColumn: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginVertical: 4,
-    width: '100%',
-    paddingVertical: 8,
-  },
-  toolChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8, // Increased gap for better spacing
-    backgroundColor: '#9ca3af',
-    borderRadius: 18, // Increased radius
-    paddingHorizontal: 12, // Increased padding
-    paddingVertical: 8, // Increased padding
-    minHeight: 40, // Ensure minimum touch target
-    width: '100%',
-    justifyContent: 'center',
-  },
-  toolChipActive: {
-    backgroundColor: '#6366f1',
-  },
-  toolChipText: {
-    color: '#ffffff',
-    fontSize: 13, // Increased font size for better readability
-    fontWeight: '700',
-  },
-  verticalSizeSlider: {
-    width: '90%',
-    height: 30,
-    marginVertical: 8,
-  },
 
-  // Bottom dock - tools row
-  bottomDock: {
-    position: 'absolute',
-    bottom: 64,
-    left: 16,
-    right: 16,
-    alignItems: 'center',
-    zIndex: 10,
-  },
-
-  // Bottom Actions
-  bottomActionsContainer: {
-    position: 'absolute',
-    bottom: 24,
-    right: 16,
-    flexDirection: 'row',
-    gap: 12,
-    zIndex: 10,
-  },
-  miniFabCluster: {
-    position: 'absolute',
-    bottom: 24,
-    right: 16,
-    flexDirection: 'column',
-    gap: 12,
-    zIndex: 10,
-  },
-  miniFab: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 10,
-  },
-  miniFabPrimary: {
-    backgroundColor: '#6366f1',
-  },
-  saveButton: {
-    backgroundColor: '#10b981',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  clearButton: {
-    backgroundColor: '#ef4444',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  exitButton: {
-    backgroundColor: '#6b7280',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
 
   // Color Picker Modal
   modalOverlay: {
@@ -1423,54 +1142,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Radial FAB menu
-  rightFabContainer: {
-    position: 'absolute',
-    bottom: 40, // Increased padding
-    right: 40, // Increased padding
-    alignItems: 'flex-end',
-    justifyContent: 'flex-end',
-    zIndex: 20,
-  },
-  fabMain: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#111827',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 12,
-  },
-  fabMainOpen: {
-    backgroundColor: '#4f46e5',
-  },
-  fabItem: {
-    position: 'absolute',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 10,
-    backgroundColor: '#6b7280',
-  },
-  fabSave: {
-    backgroundColor: '#10b981',
-  },
-  fabClear: {
-    backgroundColor: '#ef4444',
-  },
-  fabExit: {
-    backgroundColor: '#6b7280',
-  },
 
   // Color Palette
   colorPaletteContainer: {
