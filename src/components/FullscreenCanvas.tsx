@@ -229,9 +229,7 @@ export default function FullscreenCanvas({
   const canvasRef = useRef<any>(null);
   const captureViewRef = useRef<View>(null);
   const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
-  const [uiVisible, setUiVisible] = useState(true);
-  // UI density modes to control how much chrome is shown
-  // UI visibility animation
+  // UI visibility animation (always visible now)
   const uiOpacityAnim = useRef(new Animated.Value(1)).current;
 
   // Pan and zoom gesture handling for move tool
@@ -305,19 +303,6 @@ export default function FullscreenCanvas({
   });
 
 
-  // Animate UI visibility changes
-  useEffect(() => {
-    Animated.timing(uiOpacityAnim, {
-      toValue: uiVisible ? 1 : 0,
-      duration: 150, // Reduced duration for snappier animation
-      easing: Easing.ease, // Simpler easing
-      useNativeDriver: true,
-    }).start();
-  }, [uiVisible, uiOpacityAnim]);
-
-  // Auto-hide UI timer ref to manage single timer
-  const autoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Handle visibility state changes with transition management
   useEffect(() => {
     if (isTransitioning) return;
@@ -335,44 +320,9 @@ export default function FullscreenCanvas({
     }
   }, [isVisible, internalVisible, isTransitioning]);
 
-  // Clear any existing auto-hide timer
-  const clearAutoHideTimer = () => {
-    if (autoHideTimerRef.current) {
-      clearTimeout(autoHideTimerRef.current);
-      autoHideTimerRef.current = null;
-    }
-  };
-
-  // Start auto-hide timer
-  const startAutoHideTimer = () => {
-    clearAutoHideTimer();
-    autoHideTimerRef.current = setTimeout(() => {
-      setUiVisible(false);
-    }, 3000); // Increased to 3 seconds for better UX
-  };
-
-  // Auto-hide UI shortly after entering fullscreen
-  useEffect(() => {
-    if (!internalVisible) {
-      clearAutoHideTimer();
-      return;
-    }
-    startAutoHideTimer();
-
-    return () => clearAutoHideTimer();
-  }, [internalVisible]);
-
-
-  const revealUi = () => {
-    setUiVisible(true);
-    startAutoHideTimer();
-  };
-
-
-  // Function to keep UI visible when interacting with tools
-  const keepUiVisible = () => {
-    setUiVisible(true);
-    startAutoHideTimer();
+  // Function to handle tool interactions (no auto-hide functionality)
+  const handleToolInteraction = () => {
+    // UI is always visible, no need to manage visibility
   };
 
   // Sync zoom state with shared values
@@ -530,10 +480,7 @@ export default function FullscreenCanvas({
               // Remove padding to prevent canvas shrinking - tools will be positioned absolutely
             ]}
             onPress={() => {
-              if (!uiVisible) {
-                setUiVisible(true);
-                startAutoHideTimer();
-              }
+              // UI is always visible, no auto-hide functionality
             }}
             activeOpacity={1}
           >
@@ -612,7 +559,7 @@ export default function FullscreenCanvas({
               left: Math.max(16, 20 + (insets?.left ?? 0)),
             }
           ]}
-          pointerEvents={uiVisible ? 'auto' : 'none'}
+          pointerEvents="auto"
         >
           <View style={styles.actionColumn}>
             {/* Tool Selection */}
@@ -623,7 +570,7 @@ export default function FullscreenCanvas({
               ]}
               onPress={() => {
                 setCurrentTool('brush');
-                keepUiVisible();
+                handleToolInteraction();
               }}
             >
               <Feather name="edit-3" size={18} color="#ffffff" />
@@ -637,7 +584,7 @@ export default function FullscreenCanvas({
               ]}
               onPress={() => {
                 setCurrentTool('bucket');
-                keepUiVisible();
+                handleToolInteraction();
               }}
             >
               <Feather name="droplet" size={18} color="#ffffff" />
@@ -651,7 +598,7 @@ export default function FullscreenCanvas({
               ]}
               onPress={() => {
                 setCurrentTool('eraser');
-                keepUiVisible();
+                handleToolInteraction();
               }}
             >
               <Feather name="square" size={18} color="#ffffff" />
@@ -665,7 +612,7 @@ export default function FullscreenCanvas({
               ]}
               onPress={() => {
                 setCurrentTool('move');
-                keepUiVisible();
+                handleToolInteraction();
               }}
             >
               <Feather name="move" size={18} color="#ffffff" />
@@ -685,7 +632,7 @@ export default function FullscreenCanvas({
                   step={1}
                   minimumTrackTintColor="#6366f1"
                   maximumTrackTintColor="#e5e7eb"
-                  onSlidingStart={keepUiVisible}
+                  onSlidingStart={handleToolInteraction}
                 />
               </View>
               <View style={styles.sizeIndicator}>
@@ -698,7 +645,7 @@ export default function FullscreenCanvas({
               style={styles.colorPickerButton}
               onPress={() => {
                 setShowColorPicker(true);
-                keepUiVisible();
+                handleToolInteraction();
               }}
             >
               <View style={[styles.colorPreview, { backgroundColor: currentColor }]} />
@@ -710,7 +657,7 @@ export default function FullscreenCanvas({
               style={styles.actionButton}
               onPress={() => {
                 canvasRef.current?.undo?.();
-                keepUiVisible();
+                handleToolInteraction();
               }}
             >
               <Ionicons name="arrow-undo" size={18} color="#ffffff" />
@@ -720,88 +667,69 @@ export default function FullscreenCanvas({
               style={styles.actionButton}
               onPress={() => {
                 canvasRef.current?.redo?.();
-                keepUiVisible();
+                handleToolInteraction();
               }}
             >
               <Ionicons name="arrow-redo" size={18} color="#ffffff" />
               <Text style={styles.actionButtonText}>Redo</Text>
             </TouchableOpacity>
 
-            {/* Zoom Controls */}
+            {/* Zoom Controls - Icon Only */}
             <TouchableOpacity
-              style={styles.actionButton}
+              style={styles.iconButton}
               onPress={() => {
                 updateZoom(zoom + 0.25);
-                keepUiVisible();
+                handleToolInteraction();
               }}
             >
-              <Feather name="zoom-in" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Zoom In</Text>
+              <Feather name="zoom-in" size={20} color="#ffffff" />
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.actionButton}
+              style={styles.iconButton}
               onPress={() => {
                 updateZoom(zoom - 0.25);
-                keepUiVisible();
+                handleToolInteraction();
               }}
             >
-              <Feather name="zoom-out" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Zoom Out</Text>
+              <Feather name="zoom-out" size={20} color="#ffffff" />
             </TouchableOpacity>
             <View style={styles.zoomIndicator}>
               <Text style={styles.zoomText}>{Math.round(zoom * 100)}%</Text>
             </View>
             <TouchableOpacity
-              style={styles.actionButton}
+              style={styles.iconButton}
               onPress={() => {
                 updateZoom(1);
-                keepUiVisible();
+                handleToolInteraction();
               }}
             >
-              <Feather name="refresh-ccw" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Reset</Text>
+              <Feather name="refresh-ccw" size={20} color="#ffffff" />
             </TouchableOpacity>
 
-            {/* UI toggle button */}
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => setUiVisible((v) => !v)}
-              activeOpacity={0.9}
-            >
-              <Feather name={uiVisible ? 'eye' : 'eye-off'} size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>
-                {uiVisible ? 'Hide' : 'Show'}
-              </Text>
-            </TouchableOpacity>
           </View>
         </Animated.View>
 
-        {/* Always visible UI toggle button for minimal mode or when UI is hidden */}
-        {!uiVisible && (
-          <Animated.View
-            style={[
-              styles.uiToggle,
-              {
-                opacity: uiOpacityAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [1, 0], // Inverse of UI visibility
-                }),
-                top: Math.max(24, 32 + (insets?.top ?? 0)),
-                left: Math.max(20, 24 + (insets?.left ?? 0)),
-              }
-            ]}
+        {/* Top Right Actions */}
+        <Animated.View
+          style={[
+            styles.topRightActionsContainer,
+            {
+              opacity: uiOpacityAnim,
+              top: Math.max(24, 32 + (insets?.top ?? 0)),
+              right: Math.max(16, 20 + (insets?.right ?? 0)),
+            }
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.topRightButton}
+            onPress={() => {
+              handleSave();
+              handleToolInteraction();
+            }}
           >
-            <TouchableOpacity
-              onPress={() => setUiVisible(true)}
-              activeOpacity={0.9}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
-            >
-              <Feather name="eye" size={16} color="#111827" />
-              <Text style={styles.uiToggleText}>Show UI</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        )}
-
+            <Feather name="save" size={20} color="#ffffff" />
+          </TouchableOpacity>
+        </Animated.View>
 
       </SafeAreaView>
       {/* Color Picker Modal */}
@@ -919,6 +847,13 @@ const styles = StyleSheet.create({
     zIndex: 10,
     gap: 10, // Increased gap for better spacing
   },
+  topRightActionsContainer: {
+    position: 'absolute',
+    top: 24, // Will be overridden with safe area insets
+    right: 16,
+    zIndex: 10,
+    gap: 10,
+  },
   actionColumn: {
     flexDirection: 'column',
     alignItems: 'flex-start',
@@ -933,6 +868,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8, // Increased gap
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  iconButton: {
+    backgroundColor: '#6366f1',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  topRightButton: {
+    backgroundColor: '#6366f1',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
