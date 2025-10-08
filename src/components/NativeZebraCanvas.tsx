@@ -779,16 +779,19 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
   useEffect(() => {
     const initializeCanvas = async () => {
-      if (templateUri) {
-        await loadTemplate();
-      } else {
-        await createFallbackTemplate();
+      // Only initialize if we haven't been initialized yet or if templateUri actually changed to a different value
+      if (!isInitialized || (templateUri && templateUri !== initialDataUrl)) {
+        if (templateUri) {
+          await loadTemplate();
+        } else {
+          await createFallbackTemplate();
+        }
       }
     };
-    
+
     initializeCanvas();
-  // Reinitialize only when templateUri changes
-  }, [templateUri]);
+  // Reinitialize only when templateUri changes and component isn't already initialized
+  }, [templateUri, isInitialized]);
 
   return (
     <View style={styles.container} pointerEvents={interactionEnabled ? 'auto' : 'none'}>

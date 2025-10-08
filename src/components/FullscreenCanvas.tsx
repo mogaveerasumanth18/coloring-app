@@ -205,6 +205,8 @@ export default function FullscreenCanvas({
 }: FullscreenCanvasProps) {
   const insets = useSafeAreaInsets();
   const [zoom, setZoom] = useState(1);
+  const [internalVisible, setInternalVisible] = useState(isVisible);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const MIN_ZOOM = 0.5;
   const MAX_ZOOM = 3;
   const clampZoom = (z: number) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
@@ -316,6 +318,23 @@ export default function FullscreenCanvas({
   // Auto-hide UI timer ref to manage single timer
   const autoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Handle visibility state changes with transition management
+  useEffect(() => {
+    if (isTransitioning) return;
+
+    if (isVisible && !internalVisible) {
+      // Entering fullscreen
+      setIsTransitioning(true);
+      setInternalVisible(true);
+      setTimeout(() => setIsTransitioning(false), 100);
+    } else if (!isVisible && internalVisible) {
+      // Exiting fullscreen
+      setIsTransitioning(true);
+      setInternalVisible(false);
+      setTimeout(() => setIsTransitioning(false), 300);
+    }
+  }, [isVisible, internalVisible, isTransitioning]);
+
   // Clear any existing auto-hide timer
   const clearAutoHideTimer = () => {
     if (autoHideTimerRef.current) {
@@ -334,14 +353,14 @@ export default function FullscreenCanvas({
 
   // Auto-hide UI shortly after entering fullscreen
   useEffect(() => {
-    if (!isVisible) {
+    if (!internalVisible) {
       clearAutoHideTimer();
       return;
     }
     startAutoHideTimer();
 
     return () => clearAutoHideTimer();
-  }, [isVisible]);
+  }, [internalVisible]);
 
 
   const revealUi = () => {
@@ -382,25 +401,15 @@ export default function FullscreenCanvas({
   }, [currentBrushSize]);
 
   useEffect(() => {
-    const lockOrientation = async () => {
-      if (isVisible && Platform.OS !== 'web') {
-        // Lock to landscape when entering fullscreen
-        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-        StatusBar.setHidden(true);
-      }
-    };
-
-    lockOrientation();
+    // Remove orientation locking from child component - parent handles this
+    if (isVisible && Platform.OS !== 'web') {
+      StatusBar.setHidden(true);
+    }
 
     return () => {
-      const unlockOrientation = async () => {
-        if (Platform.OS !== 'web') {
-          // Restore portrait when leaving fullscreen
-          await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-          StatusBar.setHidden(false);
-        }
-      };
-      unlockOrientation();
+      if (Platform.OS !== 'web') {
+        StatusBar.setHidden(false);
+      }
     };
   }, [isVisible]);
 
@@ -425,8 +434,8 @@ export default function FullscreenCanvas({
   }, [templateUri]);
 
   const handleClose = async () => {
+    // Remove orientation locking - parent component handles this
     if (Platform.OS !== 'web') {
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
       StatusBar.setHidden(false);
     }
     onClose();
@@ -503,7 +512,7 @@ export default function FullscreenCanvas({
 
   return (
     <Modal
-      visible={isVisible}
+      visible={internalVisible}
       transparent={false}
       animationType="fade"
       presentationStyle="fullScreen"
