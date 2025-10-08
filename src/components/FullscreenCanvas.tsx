@@ -20,37 +20,25 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { captureRef } from 'react-native-view-shot';
 import * as MediaLibrary from 'expo-media-library';
-import {
-  PanGestureHandler,
-  PinchGestureHandler,
-  GestureHandlerRootView,
-  State,
-} from 'react-native-gesture-handler';
-import ReanimatedAnimated, {
-  useSharedValue,
-  useAnimatedGestureHandler,
-  useAnimatedStyle,
-  runOnJS,
-  withSpring,
-  withDecay
-} from 'react-native-reanimated';
 
 import { WorkingColoringCanvas } from './WorkingColoringCanvas';
 import { ZebraColoringCanvas } from './ZebraColoringCanvas';
 import { NativeZebraCanvas } from './NativeZebraCanvas';
 import ColorPicker from 'react-native-wheel-color-picker';
+import { GestureHandlerRootView, PinchGestureHandler, PanGestureHandler } from 'react-native-gesture-handler';
+import { useSharedValue, useAnimatedGestureHandler, runOnJS, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 
 interface FullscreenCanvasProps {
-  isVisible: boolean;
-  onClose: () => void;
-  templateUri?: string;
-  selectedColor: string;
-  selectedTool: 'brush' | 'bucket' | 'eraser' | 'move';
-  brushSize: number;
-  onColoringChange?: () => void;
-  onColoringComplete?: (dataUrl?: string) => void;
-  // Optional: initial canvas state to restore from (e.g., from main canvas)
-  initialCanvasData?: string;
+   isVisible: boolean;
+   onClose: () => void;
+   templateUri?: string;
+   selectedColor: string;
+   selectedTool: 'brush' | 'bucket' | 'eraser';
+   brushSize: number;
+   onColoringChange?: () => void;
+   onColoringComplete?: (dataUrl?: string) => void;
+   // Optional: initial canvas state to restore from (e.g., from main canvas)
+   initialCanvasData?: string;
 }
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -204,12 +192,8 @@ export default function FullscreenCanvas({
   initialCanvasData,
 }: FullscreenCanvasProps) {
   const insets = useSafeAreaInsets();
-  const [zoom, setZoom] = useState(1);
   const [internalVisible, setInternalVisible] = useState(isVisible);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const MIN_ZOOM = 0.5;
-  const MAX_ZOOM = 3;
-  const clampZoom = (z: number) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
   const [colors] = useState([
     // Purples / Pinks
     '#7c3aed', '#8b5cf6', '#a78bfa', '#db2777', '#ec4899', '#f472b6',
@@ -223,7 +207,7 @@ export default function FullscreenCanvas({
     '#111827', '#374151', '#6b7280', '#9ca3af', '#e5e7eb', '#ffffff',
   ]);
   const [currentColor, setCurrentColor] = useState(selectedColor);
-  const [currentTool, setCurrentTool] = useState<'brush' | 'bucket' | 'eraser' | 'move'>(selectedTool);
+  const [currentTool, setCurrentTool] = useState<'brush' | 'bucket' | 'eraser'>(selectedTool);
   const [currentBrushSize, setCurrentBrushSize] = useState(brushSize);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const canvasRef = useRef<any>(null);
@@ -231,76 +215,6 @@ export default function FullscreenCanvas({
   const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
   // UI visibility animation (always visible now)
   const uiOpacityAnim = useRef(new Animated.Value(1)).current;
-
-  // Pan and zoom gesture handling for move tool
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const scale = useSharedValue(zoom);
-  const savedTranslateX = useSharedValue(0);
-  const savedTranslateY = useSharedValue(0);
-  const savedScale = useSharedValue(zoom);
-  const focalX = useSharedValue(0);
-  const focalY = useSharedValue(0);
-
-  // Update zoom state when scale changes
-  const updateZoom = (newZoom: number) => {
-    const clampedZoom = clampZoom(newZoom);
-    setZoom(clampedZoom);
-    scale.value = clampedZoom;
-  };
-
-  const panHandler = useAnimatedGestureHandler({
-    onStart: () => {
-      savedTranslateX.value = translateX.value;
-      savedTranslateY.value = translateY.value;
-    },
-    onActive: (event) => {
-      // Only allow panning in move mode
-      if (currentTool === 'move') {
-        translateX.value = savedTranslateX.value + event.translationX;
-        translateY.value = savedTranslateY.value + event.translationY;
-      }
-    },
-    onEnd: () => {
-      savedTranslateX.value = translateX.value;
-      savedTranslateY.value = translateY.value;
-    },
-  });
-
-  const pinchHandler = useAnimatedGestureHandler({
-    onStart: (event: any) => {
-      savedScale.value = scale.value;
-      savedTranslateX.value = translateX.value;
-      savedTranslateY.value = translateY.value;
-      focalX.value = event.focalX;
-      focalY.value = event.focalY;
-    },
-    onActive: (event: any) => {
-      const newScale = savedScale.value * event.scale;
-      const clampedScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newScale));
-
-      // Reduce frequency of updates to improve performance
-      if (Math.abs(clampedScale - scale.value) > 0.01) {
-        scale.value = clampedScale;
-        runOnJS(updateZoom)(clampedScale);
-      }
-    },
-    onEnd: () => {
-      savedScale.value = scale.value;
-      savedTranslateX.value = translateX.value;
-      savedTranslateY.value = translateY.value;
-    },
-  });
-
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [
-        { translateX: translateX.value },
-        { translateY: translateY.value },
-        { scale: scale.value },
-      ],
-    };
-  });
 
 
   // Handle visibility state changes with transition management
@@ -324,23 +238,6 @@ export default function FullscreenCanvas({
   const handleToolInteraction = () => {
     // UI is always visible, no need to manage visibility
   };
-
-  // Sync zoom state with shared values
-  useEffect(() => {
-    scale.value = zoom;
-  }, [zoom, scale]);
-
-  // Reset transform when switching away from move tool
-  useEffect(() => {
-    if (currentTool !== 'move') {
-      translateX.value = withSpring(0);
-      translateY.value = withSpring(0);
-      scale.value = withSpring(zoom);
-      savedTranslateX.value = 0;
-      savedTranslateY.value = 0;
-      savedScale.value = zoom;
-    }
-  }, [currentTool, translateX, translateY, scale, zoom, savedTranslateX, savedTranslateY, savedScale]);
 
   // Ensure native canvas updates brush width instantly even if it caches the value internally
   useEffect(() => {
@@ -497,49 +394,41 @@ export default function FullscreenCanvas({
                     <Text style={styles.emptyCanvasText}>Loading image…</Text>
                   </View>
                 ) : (
-                  <GestureHandlerRootView style={{ flex: 1 }}>
-                    <PinchGestureHandler onGestureEvent={pinchHandler}>
-                      <ReanimatedAnimated.View style={{ flex: 1 }}>
-                        <PanGestureHandler onGestureEvent={panHandler}>
-                          <ReanimatedAnimated.View
-                            ref={captureViewRef}
-                            collapsable={false}
-                            style={[
-                              {
-                                width: computeFit(canvasSize, templateSize).width,
-                                height: computeFit(canvasSize, templateSize).height,
-                              },
-                              animatedStyle
-                            ]}
-                          >
-                            {Platform.OS === 'web' ? (
-                              <WorkingColoringCanvas
-                                selectedColor={currentColor}
-                                selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                                brushSize={currentBrushSize}
-                                templateUri={templateUri}
-                                width={computeFit(canvasSize, templateSize).width}
-                                height={computeFit(canvasSize, templateSize).height}
-                              />
-                            ) : (
-                              <NativeZebraCanvas
-                                ref={canvasRef}
-                                templateUri={templateUri}
-                                selectedColor={currentColor}
-                                selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                                brushWidth={currentBrushSize}
-                                onColoringComplete={onColoringComplete}
-                                width={computeFit(canvasSize, templateSize).width}
-                                height={computeFit(canvasSize, templateSize).height}
-                                initialDataUrl={initialCanvasData}
-                                interactionEnabled={currentTool !== 'move'}
-                              />
-                            )}
-                          </ReanimatedAnimated.View>
-                        </PanGestureHandler>
-                      </ReanimatedAnimated.View>
-                    </PinchGestureHandler>
-                  </GestureHandlerRootView>
+                  <View style={{ flex: 1 }}>
+                    <View
+                      ref={captureViewRef}
+                      collapsable={false}
+                      style={[
+                        {
+                          width: computeFit(canvasSize, templateSize).width,
+                          height: computeFit(canvasSize, templateSize).height,
+                        }
+                      ]}
+                    >
+                      {Platform.OS === 'web' ? (
+                        <WorkingColoringCanvas
+                          selectedColor={currentColor}
+                          selectedTool={currentTool}
+                          brushSize={currentBrushSize}
+                          templateUri={templateUri}
+                          width={computeFit(canvasSize, templateSize).width}
+                          height={computeFit(canvasSize, templateSize).height}
+                        />
+                      ) : (
+                        <NativeZebraCanvas
+                          ref={canvasRef}
+                          templateUri={templateUri}
+                          selectedColor={currentColor}
+                          selectedTool={currentTool}
+                          brushWidth={currentBrushSize}
+                          onColoringComplete={onColoringComplete}
+                          width={computeFit(canvasSize, templateSize).width}
+                          height={computeFit(canvasSize, templateSize).height}
+                          initialDataUrl={initialCanvasData}
+                        />
+                      )}
+                    </View>
+                  </View>
                 )
               ) : (
                 <View style={styles.emptyCanvas}>
@@ -605,19 +494,6 @@ export default function FullscreenCanvas({
               <Text style={styles.actionButtonText}>Eraser</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                currentTool === 'move' && styles.activeActionButton
-              ]}
-              onPress={() => {
-                setCurrentTool('move');
-                handleToolInteraction();
-              }}
-            >
-              <Feather name="move" size={18} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Move</Text>
-            </TouchableOpacity>
 
             {/* Brush Size Control */}
             <View style={styles.sizeControl}>
@@ -690,38 +566,6 @@ export default function FullscreenCanvas({
           ]}
         >
           <View style={styles.topRightActionsRow}>
-            {/* Zoom Controls */}
-            <TouchableOpacity
-              style={styles.topRightButton}
-              onPress={() => {
-                updateZoom(zoom - 0.25);
-                handleToolInteraction();
-              }}
-            >
-              <Feather name="zoom-out" size={20} color="#ffffff" />
-            </TouchableOpacity>
-            <View style={styles.zoomIndicator}>
-              <Text style={styles.zoomText}>{Math.round(zoom * 100)}%</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.topRightButton}
-              onPress={() => {
-                updateZoom(zoom + 0.25);
-                handleToolInteraction();
-              }}
-            >
-              <Feather name="zoom-in" size={20} color="#ffffff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.topRightButton}
-              onPress={() => {
-                updateZoom(1);
-                handleToolInteraction();
-              }}
-            >
-              <Feather name="refresh-ccw" size={20} color="#ffffff" />
-            </TouchableOpacity>
-
             {/* Save Button */}
             <TouchableOpacity
               style={styles.topRightButton}
