@@ -555,7 +555,7 @@ export default function FullscreenCanvas({
             styles.leftActionsContainer,
             {
               opacity: uiOpacityAnim,
-              top: Math.max(24, 32 + (insets?.top ?? 0)),
+              top: Math.max(40, 50 + (insets?.top ?? 0)),
               left: Math.max(16, 20 + (insets?.left ?? 0)),
             }
           ]}
@@ -674,18 +674,25 @@ export default function FullscreenCanvas({
               <Text style={styles.actionButtonText}>Redo</Text>
             </TouchableOpacity>
 
-            {/* Zoom Controls - Icon Only */}
+
+          </View>
+        </Animated.View>
+
+        {/* Top Right Actions */}
+        <Animated.View
+          style={[
+            styles.topRightActionsContainer,
+            {
+              opacity: uiOpacityAnim,
+              top: Math.max(40, 50 + (insets?.top ?? 0)),
+              right: Math.max(16, 20 + (insets?.right ?? 0)),
+            }
+          ]}
+        >
+          <View style={styles.topRightActionsRow}>
+            {/* Zoom Controls */}
             <TouchableOpacity
-              style={styles.iconButton}
-              onPress={() => {
-                updateZoom(zoom + 0.25);
-                handleToolInteraction();
-              }}
-            >
-              <Feather name="zoom-in" size={20} color="#ffffff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.iconButton}
+              style={styles.topRightButton}
               onPress={() => {
                 updateZoom(zoom - 0.25);
                 handleToolInteraction();
@@ -697,7 +704,16 @@ export default function FullscreenCanvas({
               <Text style={styles.zoomText}>{Math.round(zoom * 100)}%</Text>
             </View>
             <TouchableOpacity
-              style={styles.iconButton}
+              style={styles.topRightButton}
+              onPress={() => {
+                updateZoom(zoom + 0.25);
+                handleToolInteraction();
+              }}
+            >
+              <Feather name="zoom-in" size={20} color="#ffffff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.topRightButton}
               onPress={() => {
                 updateZoom(1);
                 handleToolInteraction();
@@ -706,29 +722,17 @@ export default function FullscreenCanvas({
               <Feather name="refresh-ccw" size={20} color="#ffffff" />
             </TouchableOpacity>
 
+            {/* Save Button */}
+            <TouchableOpacity
+              style={styles.topRightButton}
+              onPress={() => {
+                handleSave();
+                handleToolInteraction();
+              }}
+            >
+              <Feather name="save" size={20} color="#ffffff" />
+            </TouchableOpacity>
           </View>
-        </Animated.View>
-
-        {/* Top Right Actions */}
-        <Animated.View
-          style={[
-            styles.topRightActionsContainer,
-            {
-              opacity: uiOpacityAnim,
-              top: Math.max(24, 32 + (insets?.top ?? 0)),
-              right: Math.max(16, 20 + (insets?.right ?? 0)),
-            }
-          ]}
-        >
-          <TouchableOpacity
-            style={styles.topRightButton}
-            onPress={() => {
-              handleSave();
-              handleToolInteraction();
-            }}
-          >
-            <Feather name="save" size={20} color="#ffffff" />
-          </TouchableOpacity>
         </Animated.View>
 
       </SafeAreaView>
@@ -852,7 +856,11 @@ const styles = StyleSheet.create({
     top: 24, // Will be overridden with safe area insets
     right: 16,
     zIndex: 10,
-    gap: 10,
+  },
+  topRightActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   actionColumn: {
     flexDirection: 'column',
