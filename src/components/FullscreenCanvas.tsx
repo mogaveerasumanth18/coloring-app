@@ -802,51 +802,6 @@ export default function FullscreenCanvas({
           </Animated.View>
         )}
 
-        {/* Color Palette - Bottom area */}
-        <Animated.View
-          style={[
-            styles.colorPaletteContainer,
-            {
-              opacity: uiOpacityAnim,
-              bottom: Math.max(140, 160 + (insets?.bottom ?? 0)),
-              left: 16,
-              right: 16,
-            }
-          ]}
-          pointerEvents={uiVisible ? 'auto' : 'none'}
-        >
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.colorPalette}
-          >
-            {colors.slice(0, 12).map((color) => (
-              <TouchableOpacity
-                key={color}
-                style={[
-                  styles.colorPaletteItem,
-                  { backgroundColor: color },
-                  currentColor === color && styles.selectedColorPaletteItem,
-                ]}
-                onPress={() => {
-                  setCurrentColor(color);
-                  keepUiVisible();
-                }}
-                activeOpacity={0.8}
-              />
-            ))}
-            {/* Show more colors button */}
-            <TouchableOpacity
-              style={styles.colorPaletteItem}
-              onPress={() => {
-                setShowColorPicker(true);
-                keepUiVisible();
-              }}
-            >
-              <Feather name="more-horizontal" size={16} color="#ffffff" />
-            </TouchableOpacity>
-          </ScrollView>
-        </Animated.View>
 
       </SafeAreaView>
       {/* Color Picker Modal */}
