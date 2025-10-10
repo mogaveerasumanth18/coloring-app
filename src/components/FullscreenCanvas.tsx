@@ -504,12 +504,16 @@ export default function FullscreenCanvas({
               styles.rightToolbarContainer,
               {
                 opacity: uiOpacityAnim,
-                right: Math.max(16, 20 + (insets?.right ?? 0)),
+                right: Math.max(12, 16 + (insets?.right ?? 0)),
               }
             ]}
             pointerEvents="auto"
           >
-            <View style={styles.toolColumn}>
+            <ScrollView
+              style={{ maxHeight: screenHeight - 180 }}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.toolColumn}
+            >
               {/* Brush Tool */}
               <TouchableOpacity
                 style={[
@@ -521,7 +525,7 @@ export default function FullscreenCanvas({
                   handleToolInteraction();
                 }}
               >
-                <Feather name="edit-3" size={24} color={currentTool === 'brush' ? '#6366f1' : '#64748b'} />
+                <Feather name="edit-3" size={20} color={currentTool === 'brush' ? '#6366f1' : '#64748b'} />
               </TouchableOpacity>
 
               {/* Fill Tool */}
@@ -535,7 +539,7 @@ export default function FullscreenCanvas({
                   handleToolInteraction();
                 }}
               >
-                <Feather name="droplet" size={24} color={currentTool === 'bucket' ? '#6366f1' : '#64748b'} />
+                <Feather name="droplet" size={20} color={currentTool === 'bucket' ? '#6366f1' : '#64748b'} />
               </TouchableOpacity>
 
               {/* Eraser Tool */}
@@ -549,18 +553,41 @@ export default function FullscreenCanvas({
                   handleToolInteraction();
                 }}
               >
-                <Feather name="square" size={24} color={currentTool === 'eraser' ? '#6366f1' : '#64748b'} />
+                <Feather name="square" size={20} color={currentTool === 'eraser' ? '#6366f1' : '#64748b'} />
               </TouchableOpacity>
 
-              {/* Color Picker */}
+              {/* Color Swatches Grid - matching Figma design */}
+              <View style={styles.colorSwatchesContainer}>
+                {/* Create rows of 2 colors each */}
+                {Array.from({ length: Math.ceil(colors.length / 2) }, (_, rowIndex) => (
+                  <View key={rowIndex} style={styles.colorSwatchRow}>
+                    {colors.slice(rowIndex * 2, rowIndex * 2 + 2).map((color) => (
+                      <TouchableOpacity
+                        key={color}
+                        style={[
+                          styles.colorSwatch,
+                          { backgroundColor: color },
+                          currentColor === color && styles.selectedColorSwatch,
+                        ]}
+                        onPress={() => {
+                          setCurrentColor(color);
+                          handleToolInteraction();
+                        }}
+                      />
+                    ))}
+                  </View>
+                ))}
+              </View>
+
+              {/* Custom Color Picker Button */}
               <TouchableOpacity
-                style={styles.colorPickerToolButton}
+                style={[styles.toolButton, { marginTop: 4 }]}
                 onPress={() => {
                   setShowColorPicker(true);
                   handleToolInteraction();
                 }}
               >
-                <View style={[styles.colorPreviewLarge, { backgroundColor: currentColor }]} />
+                <Feather name="plus-circle" size={20} color="#64748b" />
               </TouchableOpacity>
 
               {/* Brush Size Slider */}
@@ -578,7 +605,7 @@ export default function FullscreenCanvas({
                   onSlidingStart={handleToolInteraction}
                 />
               </View>
-            </View>
+            </ScrollView>
           </Animated.View>
 
         </SafeAreaView>
@@ -642,7 +669,7 @@ export default function FullscreenCanvas({
 const styles = StyleSheet.create({
   fullscreenContainer: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#f0f0f0',
   },
   safeArea: {
     flex: 1,
@@ -657,7 +684,7 @@ const styles = StyleSheet.create({
   },
   canvasContainer: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 12,
     overflow: 'hidden',
     width: '100%',
     height: '100%',
@@ -667,10 +694,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    margin: 16,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+    margin: 12,
   },
   emptyCanvas: {
     backgroundColor: '#f8fafc',
@@ -701,47 +728,47 @@ const styles = StyleSheet.create({
   topCenterActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    gap: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 6,
   },
   topActionButton: {
     backgroundColor: '#6366f1',
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    minWidth: 100,
+    gap: 6,
+    minWidth: 90,
     justifyContent: 'center',
   },
   topActionButtonText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
   saveButton: {
     backgroundColor: '#10b981',
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingHorizontal: 22,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    minWidth: 100,
+    gap: 6,
+    minWidth: 90,
     justifyContent: 'center',
   },
   saveButtonText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
 
@@ -750,27 +777,27 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     top: '50%',
-    transform: [{ translateY: -200 }],
+    transform: [{ translateY: -250 }],
     zIndex: 10,
   },
   toolColumn: {
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    gap: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 6,
   },
   toolButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 50,
+    height: 50,
+    borderRadius: 12,
     backgroundColor: '#f8fafc',
     alignItems: 'center',
     justifyContent: 'center',
@@ -787,46 +814,68 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   colorPickerToolButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 50,
+    height: 50,
+    borderRadius: 12,
     backgroundColor: '#f8fafc',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 8,
+    padding: 6,
   },
   colorPreviewLarge: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  colorSwatchesContainer: {
+    gap: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    maxHeight: 300,
+  },
+  colorSwatchRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  colorSwatch: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    borderWidth: 3,
-    borderColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
   },
-
+  selectedColorSwatch: {
+    borderWidth: 3,
+    borderColor: '#6366f1',
+    transform: [{ scale: 1.05 }],
+  },
 
   // Size Control (Vertical)
   sizeControlVertical: {
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     paddingVertical: 8,
-    marginTop: 8,
+    marginTop: 4,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
     width: '100%',
   },
   sizeTextSmall: {
     color: '#1f2937',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   verticalSlider: {
     width: 40,
-    height: 120,
+    height: 100,
   },
 
 
