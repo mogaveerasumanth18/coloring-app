@@ -14,6 +14,7 @@ import {
   Image,
   Animated,
   Easing,
+  Pressable,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,8 +26,9 @@ import { WorkingColoringCanvas } from './WorkingColoringCanvas';
 import { ZebraColoringCanvas } from './ZebraColoringCanvas';
 import { NativeZebraCanvas } from './NativeZebraCanvas';
 import ColorPicker from 'react-native-wheel-color-picker';
-import { GestureHandlerRootView, PinchGestureHandler, PanGestureHandler } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, PinchGestureHandler, PanGestureHandler, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { useSharedValue, useAnimatedGestureHandler, runOnJS, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import Reanimated from 'react-native-reanimated';
 
 interface FullscreenCanvasProps {
   isVisible: boolean;
@@ -210,6 +212,102 @@ export default function FullscreenCanvas({
   const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
   const uiOpacityAnim = useRef(new Animated.Value(1)).current;
 
+  // Zoom and pan state for Move tool
+  const scale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedScale = useSharedValue(1);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  // Reset zoom when switching away from move tool
+  useEffect(() => {
+    if (currentTool !== 'move') {
+      scale.value = withSpring(1);
+      translateX.value = withSpring(0);
+      translateY.value = withSpring(0);
+      savedScale.value = 1;
+      savedTranslateX.value = 0;
+      savedTranslateY.value = 0;
+    }
+  }, [currentTool]);
+
+  // Pinch gesture for zooming (only active when move tool is selected)
+  const pinchGesture = Gesture.Pinch()
+    .enabled(currentTool === 'move')
+    .onStart(() => {
+      savedScale.value = scale.value;
+    })
+    .onUpdate((event) => {
+      scale.value = Math.max(1, Math.min(savedScale.value * event.scale, 4));
+    })
+    .onEnd(() => {
+      if (scale.value < 1) {
+        scale.value = withSpring(1);
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+      }
+    });
+
+  // Pan gesture for moving (only active when move tool is selected)
+  const panGesture = Gesture.Pan()
+    .enabled(currentTool === 'move')
+    .onStart(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    })
+    .onUpdate((event) => {
+      translateX.value = savedTranslateX.value + event.translationX;
+      translateY.value = savedTranslateY.value + event.translationY;
+    })
+    .onEnd(() => {
+      // Constrain to prevent panning too far
+      const maxTranslate = 200 * (scale.value - 1);
+      if (Math.abs(translateX.value) > maxTranslate) {
+        translateX.value = withSpring(Math.sign(translateX.value) * maxTranslate);
+      }
+      if (Math.abs(translateY.value) > maxTranslate) {
+        translateY.value = withSpring(Math.sign(translateY.value) * maxTranslate);
+      }
+    });
+
+  // Combine gestures for simultaneous pinch and pan
+  const composedGesture = Gesture.Simultaneous(pinchGesture, panGesture);
+
+  // Animated style for canvas transform
+  const animatedCanvasStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+        { scale: scale.value },
+      ],
+    };
+  });
+
+  // Sync external props with internal state when they change
+  useEffect(() => {
+    setCurrentColor(selectedColor);
+  }, [selectedColor]);
+
+  useEffect(() => {
+    setCurrentTool(selectedTool);
+  }, [selectedTool]);
+
+  useEffect(() => {
+    setCurrentBrushSize(brushSize);
+  }, [brushSize]);
+
+  // Log current state for debugging
+  useEffect(() => {
+    console.log('Fullscreen Canvas State:', {
+      currentTool,
+      currentColor,
+      currentBrushSize,
+      templateUri: templateUri ? 'present' : 'none'
+    });
+  }, [currentTool, currentColor, currentBrushSize, templateUri]);
+
 
   // Handle visibility state changes with transition management
   useEffect(() => {
@@ -275,8 +373,13 @@ export default function FullscreenCanvas({
   }, [templateUri]);
 
   const handleClose = async () => {
-    // Remove orientation locking - parent component handles this
+    // Reset orientation to portrait when exiting fullscreen
     if (Platform.OS !== 'web') {
+      try {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      } catch (error) {
+        console.error('Failed to lock portrait orientation:', error);
+      }
       StatusBar.setHidden(false);
     }
     onClose();
@@ -371,7 +474,10 @@ export default function FullscreenCanvas({
                 styles.toolButtonLeft,
                 currentTool === 'brush' && styles.toolButtonLeftActive
               ]}
-              onPress={() => setCurrentTool('brush')}
+              onPress={() => {
+                console.log('Paint tool selected');
+                setCurrentTool('brush');
+              }}
             >
               <Feather name="edit-3" size={20} color="#ffffff" />
               <Text style={styles.toolButtonText}>Paint</Text>
@@ -383,7 +489,10 @@ export default function FullscreenCanvas({
                 styles.toolButtonLeft,
                 currentTool === 'bucket' && styles.toolButtonLeftActive
               ]}
-              onPress={() => setCurrentTool('bucket')}
+              onPress={() => {
+                console.log('Fill tool selected');
+                setCurrentTool('bucket');
+              }}
             >
               <Feather name="droplet" size={20} color="#ffffff" />
               <Text style={styles.toolButtonText}>Fill</Text>
@@ -395,7 +504,10 @@ export default function FullscreenCanvas({
                 styles.toolButtonLeft,
                 currentTool === 'eraser' && styles.toolButtonLeftActive
               ]}
-              onPress={() => setCurrentTool('eraser')}
+              onPress={() => {
+                console.log('Eraser tool selected');
+                setCurrentTool('eraser');
+              }}
             >
               <Feather name="square" size={20} color="#ffffff" />
               <Text style={styles.toolButtonText}>Eraser</Text>
@@ -407,7 +519,10 @@ export default function FullscreenCanvas({
                 styles.toolButtonLeft,
                 currentTool === 'move' && styles.toolButtonLeftActive
               ]}
-              onPress={() => setCurrentTool('move')}
+              onPress={() => {
+                console.log('Move tool selected');
+                setCurrentTool('move');
+              }}
             >
               <Feather name="move" size={20} color="#ffffff" />
               <Text style={styles.toolButtonText}>Move</Text>
@@ -416,7 +531,10 @@ export default function FullscreenCanvas({
             {/* Color Tool - Opens color picker */}
             <TouchableOpacity
               style={styles.toolButtonLeft}
-              onPress={() => setShowColorPicker(true)}
+              onPress={() => {
+                console.log('Opening color picker');
+                setShowColorPicker(true);
+              }}
             >
               <Feather name="aperture" size={20} color="#ffffff" />
               <Text style={styles.toolButtonText}>Color</Text>
@@ -430,7 +548,10 @@ export default function FullscreenCanvas({
               <Text style={styles.previewLabel}>Color:</Text>
               <TouchableOpacity
                 style={[styles.colorPreview, { backgroundColor: currentColor }]}
-                onPress={() => setShowColorPicker(true)}
+                onPress={() => {
+                  console.log('Color preview tapped, opening picker');
+                  setShowColorPicker(true);
+                }}
               />
             </View>
 
@@ -439,7 +560,10 @@ export default function FullscreenCanvas({
               <Text style={styles.previewLabel}>Size:</Text>
               <TouchableOpacity
                 style={styles.sizePreview}
-                onPress={() => setShowSizePicker(true)}
+                onPress={() => {
+                  console.log('Size preview tapped, opening picker');
+                  setShowSizePicker(true);
+                }}
               >
                 <View
                   style={[
@@ -458,6 +582,9 @@ export default function FullscreenCanvas({
           <View style={styles.mainContent}>
             {/* Top Action Bar */}
             <View style={styles.topActionBar}>
+              {/* Spacer to push buttons to the right */}
+              <View style={{ flex: 1 }} />
+
               {/* Undo */}
               <TouchableOpacity
                 style={styles.actionButton}
@@ -513,65 +640,53 @@ export default function FullscreenCanvas({
                     <Text style={styles.emptyCanvasText}>Loading image…</Text>
                   </View>
                 ) : (
-                  <View
-                    ref={captureViewRef}
-                    collapsable={false}
-                    style={[
-                      {
-                        width: computeFit(canvasSize, templateSize).width,
-                        height: computeFit(canvasSize, templateSize).height,
-                      }
-                    ]}
-                  >
-                    {Platform.OS === 'web' ? (
-                      <WorkingColoringCanvas
-                        selectedColor={currentColor}
-                        selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                        brushSize={currentBrushSize}
-                        templateUri={templateUri}
-                        width={computeFit(canvasSize, templateSize).width}
-                        height={computeFit(canvasSize, templateSize).height}
-                      />
-                    ) : (
-                      <NativeZebraCanvas
-                        ref={canvasRef}
-                        templateUri={templateUri}
-                        selectedColor={currentColor}
-                        selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                        brushWidth={currentBrushSize}
-                        onColoringComplete={onColoringComplete}
-                        width={computeFit(canvasSize, templateSize).width}
-                        height={computeFit(canvasSize, templateSize).height}
-                        initialDataUrl={initialCanvasData}
-                      />
-                    )}
-                  </View>
+                  <GestureDetector gesture={composedGesture}>
+                    <Reanimated.View
+                      style={[animatedCanvasStyle]}
+                    >
+                      <View
+                        ref={captureViewRef}
+                        collapsable={false}
+                        style={[
+                          {
+                            width: computeFit(canvasSize, templateSize).width,
+                            height: computeFit(canvasSize, templateSize).height,
+                          }
+                        ]}
+                      >
+                        {Platform.OS === 'web' ? (
+                          <WorkingColoringCanvas
+                            selectedColor={currentColor}
+                            selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                            brushSize={currentBrushSize}
+                            templateUri={templateUri}
+                            width={computeFit(canvasSize, templateSize).width}
+                            height={computeFit(canvasSize, templateSize).height}
+                          />
+                        ) : (
+                          <NativeZebraCanvas
+                            key={`canvas-${currentTool}-${currentColor}-${currentBrushSize}`}
+                            ref={canvasRef}
+                            templateUri={templateUri}
+                            selectedColor={currentColor}
+                            selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                            brushWidth={currentBrushSize}
+                            onColoringComplete={onColoringComplete}
+                            width={computeFit(canvasSize, templateSize).width}
+                            height={computeFit(canvasSize, templateSize).height}
+                            initialDataUrl={initialCanvasData}
+                            interactionEnabled={currentTool !== 'move'}
+                          />
+                        )}
+                      </View>
+                    </Reanimated.View>
+                  </GestureDetector>
                 )
               ) : (
                 <View style={styles.emptyCanvas}>
                   <Text style={styles.emptyCanvasText}>Select a template to start coloring! 🎨</Text>
                 </View>
               )}
-            </View>
-          </View>
-
-          {/* Right Side Elements */}
-          <View style={styles.rightSide}>
-            {/* Play Button (placeholder) */}
-            <TouchableOpacity style={styles.playButton}>
-              <Feather name="play" size={24} color="#ffffff" />
-            </TouchableOpacity>
-
-            {/* Quick Color Swatches */}
-            <View style={styles.quickSwatches}>
-              <TouchableOpacity
-                style={[styles.quickSwatch, { backgroundColor: '#000000' }]}
-                onPress={() => setCurrentColor('#000000')}
-              />
-              <TouchableOpacity
-                style={[styles.quickSwatch, { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb' }]}
-                onPress={() => setCurrentColor('#ffffff')}
-              />
             </View>
           </View>
 
@@ -584,44 +699,59 @@ export default function FullscreenCanvas({
           animationType="fade"
           onRequestClose={() => setShowColorPicker(false)}
         >
-          <TouchableOpacity
+          <Pressable
             style={styles.modalOverlay}
-            activeOpacity={1}
             onPress={() => setShowColorPicker(false)}
           >
-            <View style={styles.colorPickerModal}>
-              <Text style={styles.modalTitle}>Pick a Color</Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <View style={styles.colorGrid}>
-                  {colors.map((color) => (
-                    <TouchableOpacity
-                      key={color}
-                      style={[
-                        styles.colorOption,
-                        { backgroundColor: color },
-                        currentColor === color && styles.selectedColorOption,
-                      ]}
-                      onPress={() => {
+            <Pressable
+              onPress={(e) => {
+                // Prevent modal from closing when pressing inside
+              }}
+            >
+              <View style={styles.colorPickerModal} pointerEvents="box-none">
+                <Text style={styles.modalTitle}>Pick a Color</Text>
+                <ScrollView showsVerticalScrollIndicator={false} pointerEvents="box-none">
+                  <View style={styles.colorGrid} pointerEvents="auto">
+                    {colors.map((color) => (
+                      <TouchableOpacity
+                        key={color}
+                        style={[
+                          styles.colorOption,
+                          { backgroundColor: color },
+                          currentColor === color && styles.selectedColorOption,
+                        ]}
+                        onPress={() => {
+                          console.log('Color selected:', color);
+                          setCurrentColor(color);
+                          setShowColorPicker(false);
+                        }}
+                      />
+                    ))}
+                  </View>
+
+                  {/* Custom color picker with spectrum */}
+                  <View style={styles.customColorPickerContainer} pointerEvents="auto">
+                    <CustomColorPicker
+                      selectedColor={currentColor}
+                      onColorChange={(color) => {
+                        console.log('Custom color selected:', color);
                         setCurrentColor(color);
                         setShowColorPicker(false);
                       }}
                     />
-                  ))}
-                </View>
+                  </View>
+                </ScrollView>
 
-                {/* Custom color picker with spectrum */}
-                <View style={styles.customColorPickerContainer}>
-                  <CustomColorPicker
-                    selectedColor={currentColor}
-                    onColorChange={(color) => {
-                      setCurrentColor(color);
-                      setShowColorPicker(false);
-                    }}
-                  />
-                </View>
-              </ScrollView>
-            </View>
-          </TouchableOpacity>
+                {/* Close Button */}
+                <TouchableOpacity
+                  style={styles.modalCloseButton}
+                  onPress={() => setShowColorPicker(false)}
+                >
+                  <Text style={styles.modalCloseButtonText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
         </Modal>
 
         {/* Size Picker Modal */}
@@ -631,44 +761,49 @@ export default function FullscreenCanvas({
           animationType="fade"
           onRequestClose={() => setShowSizePicker(false)}
         >
-          <TouchableOpacity
+          <Pressable
             style={styles.modalOverlay}
-            activeOpacity={1}
             onPress={() => setShowSizePicker(false)}
           >
-            <View style={styles.sizePickerModal}>
-              <Text style={styles.modalTitle}>Brush Size</Text>
-              <View style={styles.sizePreviewLarge}>
-                <View
-                  style={[
-                    styles.sizeCircleLarge,
-                    {
-                      width: Math.max(10, Math.min(100, currentBrushSize * 2)),
-                      height: Math.max(10, Math.min(100, currentBrushSize * 2)),
-                      backgroundColor: currentColor,
-                    }
-                  ]}
+            <Pressable
+              onPress={(e) => {
+                // Prevent modal from closing when pressing inside
+              }}
+            >
+              <View style={styles.sizePickerModal} pointerEvents="box-none">
+                <Text style={styles.modalTitle}>Brush Size</Text>
+                <View style={styles.sizePreviewLarge}>
+                  <View
+                    style={[
+                      styles.sizeCircleLarge,
+                      {
+                        width: Math.max(10, Math.min(100, currentBrushSize * 2)),
+                        height: Math.max(10, Math.min(100, currentBrushSize * 2)),
+                        backgroundColor: currentColor,
+                      }
+                    ]}
+                  />
+                </View>
+                <Text style={styles.sizeValueText}>{Math.round(currentBrushSize)}px</Text>
+                <Slider
+                  style={styles.sizeSlider}
+                  value={currentBrushSize}
+                  onValueChange={setCurrentBrushSize}
+                  minimumValue={2}
+                  maximumValue={50}
+                  step={1}
+                  minimumTrackTintColor="#6366f1"
+                  maximumTrackTintColor="#e5e7eb"
                 />
+                <TouchableOpacity
+                  style={styles.modalCloseButton}
+                  onPress={() => setShowSizePicker(false)}
+                >
+                  <Text style={styles.modalCloseButtonText}>Done</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.sizeValueText}>{Math.round(currentBrushSize)}px</Text>
-              <Slider
-                style={styles.sizeSlider}
-                value={currentBrushSize}
-                onValueChange={setCurrentBrushSize}
-                minimumValue={2}
-                maximumValue={50}
-                step={1}
-                minimumTrackTintColor="#6366f1"
-                maximumTrackTintColor="#e5e7eb"
-              />
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setShowSizePicker(false)}
-              >
-                <Text style={styles.modalCloseButtonText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
+            </Pressable>
+          </Pressable>
         </Modal>
       </View>
     </Modal>
@@ -702,14 +837,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   toolButtonLeftActive: {
-    backgroundColor: '#4f46e5',
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    elevation: 4,
+    backgroundColor: '#4338ca',
+    borderColor: '#818cf8',
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+    elevation: 8,
+    transform: [{ scale: 1.05 }],
   },
   toolButtonText: {
     color: '#ffffff',
@@ -754,17 +893,17 @@ const styles = StyleSheet.create({
   },
   topActionBar: {
     height: 60,
-    backgroundColor: '#6366f1',
+    backgroundColor: 'transparent',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     gap: 8,
   },
   actionButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#6366f1',
     borderRadius: 12,
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -793,31 +932,6 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontSize: 16,
     textAlign: 'center',
-  },
-
-  // Right Side
-  rightSide: {
-    width: 80,
-    paddingTop: 80,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  playButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#000000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  quickSwatches: {
-    gap: 12,
-  },
-  quickSwatch: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
   },
 
   // Modals
