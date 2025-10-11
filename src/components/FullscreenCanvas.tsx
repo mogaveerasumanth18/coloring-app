@@ -33,11 +33,10 @@ interface FullscreenCanvasProps {
   onClose: () => void;
   templateUri?: string;
   selectedColor: string;
-  selectedTool: 'brush' | 'bucket' | 'eraser';
+  selectedTool: 'brush' | 'bucket' | 'eraser' | 'move';
   brushSize: number;
   onColoringChange?: () => void;
   onColoringComplete?: (dataUrl?: string) => void;
-  // Optional: initial canvas state to restore from (e.g., from main canvas)
   initialCanvasData?: string;
 }
 
@@ -195,25 +194,20 @@ export default function FullscreenCanvas({
   const [internalVisible, setInternalVisible] = useState(isVisible);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [colors] = useState([
-    // Purples / Pinks
-    '#7c3aed', '#8b5cf6', '#a78bfa', '#db2777', '#ec4899', '#f472b6',
-    // Reds / Oranges
-    '#ef4444', '#f87171', '#fb923c', '#f97316', '#fdba74', '#f59e0b',
-    // Yellows / Greens
-    '#eab308', '#fde047', '#84cc16', '#22c55e', '#10b981', '#86efac',
-    // Cyans / Blues
     '#06b6d4', '#22d3ee', '#0ea5e9', '#3b82f6', '#60a5fa', '#2563eb',
-    // Neutrals
+    '#7c3aed', '#8b5cf6', '#a78bfa', '#db2777', '#ec4899', '#f472b6',
+    '#ef4444', '#f87171', '#fb923c', '#f97316', '#fdba74', '#f59e0b',
+    '#eab308', '#fde047', '#84cc16', '#22c55e', '#10b981', '#86efac',
     '#111827', '#374151', '#6b7280', '#9ca3af', '#e5e7eb', '#ffffff',
   ]);
   const [currentColor, setCurrentColor] = useState(selectedColor);
-  const [currentTool, setCurrentTool] = useState<'brush' | 'bucket' | 'eraser'>(selectedTool);
+  const [currentTool, setCurrentTool] = useState<'brush' | 'bucket' | 'eraser' | 'move'>(selectedTool);
   const [currentBrushSize, setCurrentBrushSize] = useState(brushSize);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showSizePicker, setShowSizePicker] = useState(false);
   const canvasRef = useRef<any>(null);
   const captureViewRef = useRef<View>(null);
   const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
-  // UI visibility animation (always visible now)
   const uiOpacityAnim = useRef(new Animated.Value(1)).current;
 
 
@@ -363,26 +357,151 @@ export default function FullscreenCanvas({
       transparent={false}
       animationType="fade"
       presentationStyle="fullScreen"
-      // iOS hint; Android will follow lockAsync
       supportedOrientations={["landscape", "landscape-left", "landscape-right"]}
       statusBarTranslucent
     >
       <View style={styles.fullscreenContainer}>
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
 
-          {/* Canvas area */}
-          <TouchableOpacity
-            style={[
-              styles.canvasSection,
-              // Remove padding to prevent canvas shrinking - tools will be positioned absolutely
-            ]}
-            onPress={() => {
-              // UI is always visible, no auto-hide functionality
-            }}
-            activeOpacity={1}
-          >
+          {/* Left Sidebar - Tool Palette */}
+          <View style={styles.leftSidebar}>
+            {/* Paint Tool */}
+            <TouchableOpacity
+              style={[
+                styles.toolButtonLeft,
+                currentTool === 'brush' && styles.toolButtonLeftActive
+              ]}
+              onPress={() => setCurrentTool('brush')}
+            >
+              <Feather name="edit-3" size={20} color="#ffffff" />
+              <Text style={styles.toolButtonText}>Paint</Text>
+            </TouchableOpacity>
+
+            {/* Fill Tool */}
+            <TouchableOpacity
+              style={[
+                styles.toolButtonLeft,
+                currentTool === 'bucket' && styles.toolButtonLeftActive
+              ]}
+              onPress={() => setCurrentTool('bucket')}
+            >
+              <Feather name="droplet" size={20} color="#ffffff" />
+              <Text style={styles.toolButtonText}>Fill</Text>
+            </TouchableOpacity>
+
+            {/* Eraser Tool */}
+            <TouchableOpacity
+              style={[
+                styles.toolButtonLeft,
+                currentTool === 'eraser' && styles.toolButtonLeftActive
+              ]}
+              onPress={() => setCurrentTool('eraser')}
+            >
+              <Feather name="square" size={20} color="#ffffff" />
+              <Text style={styles.toolButtonText}>Eraser</Text>
+            </TouchableOpacity>
+
+            {/* Move Tool */}
+            <TouchableOpacity
+              style={[
+                styles.toolButtonLeft,
+                currentTool === 'move' && styles.toolButtonLeftActive
+              ]}
+              onPress={() => setCurrentTool('move')}
+            >
+              <Feather name="move" size={20} color="#ffffff" />
+              <Text style={styles.toolButtonText}>Move</Text>
+            </TouchableOpacity>
+
+            {/* Color Tool - Opens color picker */}
+            <TouchableOpacity
+              style={styles.toolButtonLeft}
+              onPress={() => setShowColorPicker(true)}
+            >
+              <Feather name="aperture" size={20} color="#ffffff" />
+              <Text style={styles.toolButtonText}>Color</Text>
+            </TouchableOpacity>
+
+            {/* Spacer */}
+            <View style={{ flex: 1 }} />
+
+            {/* Color Preview */}
+            <View style={styles.previewContainer}>
+              <Text style={styles.previewLabel}>Color:</Text>
+              <TouchableOpacity
+                style={[styles.colorPreview, { backgroundColor: currentColor }]}
+                onPress={() => setShowColorPicker(true)}
+              />
+            </View>
+
+            {/* Size Preview */}
+            <View style={styles.previewContainer}>
+              <Text style={styles.previewLabel}>Size:</Text>
+              <TouchableOpacity
+                style={styles.sizePreview}
+                onPress={() => setShowSizePicker(true)}
+              >
+                <View
+                  style={[
+                    styles.sizeCircle,
+                    {
+                      width: Math.max(8, Math.min(28, currentBrushSize * 0.6)),
+                      height: Math.max(8, Math.min(28, currentBrushSize * 0.6)),
+                    }
+                  ]}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Main Content Area */}
+          <View style={styles.mainContent}>
+            {/* Top Action Bar */}
+            <View style={styles.topActionBar}>
+              {/* Undo */}
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => canvasRef.current?.undo?.()}
+              >
+                <Ionicons name="arrow-undo" size={24} color="#ffffff" />
+              </TouchableOpacity>
+
+              {/* Redo */}
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => canvasRef.current?.redo?.()}
+              >
+                <Ionicons name="arrow-redo" size={24} color="#ffffff" />
+              </TouchableOpacity>
+
+              {/* Fullscreen Exit */}
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleClose}
+              >
+                <MaterialIcons name="fullscreen-exit" size={24} color="#ffffff" />
+              </TouchableOpacity>
+
+              {/* Export (placeholder) */}
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleSave}
+              >
+                <Feather name="share" size={24} color="#ffffff" />
+              </TouchableOpacity>
+
+              {/* Save */}
+              <TouchableOpacity
+                style={[styles.actionButton, styles.saveActionButton]}
+                onPress={handleSave}
+              >
+                <Feather name="save" size={24} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Canvas Area */}
             <View
-              style={styles.canvasContainer}
+              style={styles.canvasArea}
               onLayout={(e) => {
                 const { width, height } = e.nativeEvent.layout;
                 if (width && height) setCanvasSize({ width, height });
@@ -394,40 +513,38 @@ export default function FullscreenCanvas({
                     <Text style={styles.emptyCanvasText}>Loading image…</Text>
                   </View>
                 ) : (
-                  <View style={{ flex: 1 }}>
-                    <View
-                      ref={captureViewRef}
-                      collapsable={false}
-                      style={[
-                        {
-                          width: computeFit(canvasSize, templateSize).width,
-                          height: computeFit(canvasSize, templateSize).height,
-                        }
-                      ]}
-                    >
-                      {Platform.OS === 'web' ? (
-                        <WorkingColoringCanvas
-                          selectedColor={currentColor}
-                          selectedTool={currentTool}
-                          brushSize={currentBrushSize}
-                          templateUri={templateUri}
-                          width={computeFit(canvasSize, templateSize).width}
-                          height={computeFit(canvasSize, templateSize).height}
-                        />
-                      ) : (
-                        <NativeZebraCanvas
-                          ref={canvasRef}
-                          templateUri={templateUri}
-                          selectedColor={currentColor}
-                          selectedTool={currentTool}
-                          brushWidth={currentBrushSize}
-                          onColoringComplete={onColoringComplete}
-                          width={computeFit(canvasSize, templateSize).width}
-                          height={computeFit(canvasSize, templateSize).height}
-                          initialDataUrl={initialCanvasData}
-                        />
-                      )}
-                    </View>
+                  <View
+                    ref={captureViewRef}
+                    collapsable={false}
+                    style={[
+                      {
+                        width: computeFit(canvasSize, templateSize).width,
+                        height: computeFit(canvasSize, templateSize).height,
+                      }
+                    ]}
+                  >
+                    {Platform.OS === 'web' ? (
+                      <WorkingColoringCanvas
+                        selectedColor={currentColor}
+                        selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                        brushSize={currentBrushSize}
+                        templateUri={templateUri}
+                        width={computeFit(canvasSize, templateSize).width}
+                        height={computeFit(canvasSize, templateSize).height}
+                      />
+                    ) : (
+                      <NativeZebraCanvas
+                        ref={canvasRef}
+                        templateUri={templateUri}
+                        selectedColor={currentColor}
+                        selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                        brushWidth={currentBrushSize}
+                        onColoringComplete={onColoringComplete}
+                        width={computeFit(canvasSize, templateSize).width}
+                        height={computeFit(canvasSize, templateSize).height}
+                        initialDataUrl={initialCanvasData}
+                      />
+                    )}
                   </View>
                 )
               ) : (
@@ -436,179 +553,30 @@ export default function FullscreenCanvas({
                 </View>
               )}
             </View>
-          </TouchableOpacity>
+          </View>
 
-          {/* Top Center Actions */}
-          <Animated.View
-            style={[
-              styles.topCenterActionsContainer,
-              {
-                opacity: uiOpacityAnim,
-                top: Math.max(16, 20 + (insets?.top ?? 0)),
-              }
-            ]}
-          >
-            <View style={styles.topCenterActionsRow}>
-              {/* Undo */}
-              <TouchableOpacity
-                style={styles.topActionButton}
-                onPress={() => {
-                  canvasRef.current?.undo?.();
-                  handleToolInteraction();
-                }}
-              >
-                <Ionicons name="arrow-undo" size={20} color="#ffffff" />
-                <Text style={styles.topActionButtonText}>Undo</Text>
-              </TouchableOpacity>
+          {/* Right Side Elements */}
+          <View style={styles.rightSide}>
+            {/* Play Button (placeholder) */}
+            <TouchableOpacity style={styles.playButton}>
+              <Feather name="play" size={24} color="#ffffff" />
+            </TouchableOpacity>
 
-              {/* Redo */}
+            {/* Quick Color Swatches */}
+            <View style={styles.quickSwatches}>
               <TouchableOpacity
-                style={styles.topActionButton}
-                onPress={() => {
-                  canvasRef.current?.redo?.();
-                  handleToolInteraction();
-                }}
-              >
-                <Ionicons name="arrow-redo" size={20} color="#ffffff" />
-                <Text style={styles.topActionButtonText}>Redo</Text>
-              </TouchableOpacity>
-
-              {/* Exit Fullscreen */}
+                style={[styles.quickSwatch, { backgroundColor: '#000000' }]}
+                onPress={() => setCurrentColor('#000000')}
+              />
               <TouchableOpacity
-                style={styles.topActionButton}
-                onPress={() => {
-                  handleClose();
-                  handleToolInteraction();
-                }}
-              >
-                <MaterialIcons name="fullscreen-exit" size={20} color="#ffffff" />
-              </TouchableOpacity>
-
-              {/* Save */}
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={() => {
-                  handleSave();
-                  handleToolInteraction();
-                }}
-              >
-                <Feather name="save" size={20} color="#ffffff" />
-                <Text style={styles.saveButtonText}>Save</Text>
-              </TouchableOpacity>
+                style={[styles.quickSwatch, { backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e5e7eb' }]}
+                onPress={() => setCurrentColor('#ffffff')}
+              />
             </View>
-          </Animated.View>
-
-          {/* Right sidebar toolbar */}
-          <Animated.View
-            style={[
-              styles.rightToolbarContainer,
-              {
-                opacity: uiOpacityAnim,
-                right: Math.max(12, 16 + (insets?.right ?? 0)),
-              }
-            ]}
-            pointerEvents="auto"
-          >
-            <ScrollView
-              style={{ maxHeight: screenHeight - 180 }}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.toolColumn}
-            >
-              {/* Brush Tool */}
-              <TouchableOpacity
-                style={[
-                  styles.toolButton,
-                  currentTool === 'brush' && styles.activeToolButton
-                ]}
-                onPress={() => {
-                  setCurrentTool('brush');
-                  handleToolInteraction();
-                }}
-              >
-                <Feather name="edit-3" size={20} color={currentTool === 'brush' ? '#6366f1' : '#64748b'} />
-              </TouchableOpacity>
-
-              {/* Fill Tool */}
-              <TouchableOpacity
-                style={[
-                  styles.toolButton,
-                  currentTool === 'bucket' && styles.activeToolButton
-                ]}
-                onPress={() => {
-                  setCurrentTool('bucket');
-                  handleToolInteraction();
-                }}
-              >
-                <Feather name="droplet" size={20} color={currentTool === 'bucket' ? '#6366f1' : '#64748b'} />
-              </TouchableOpacity>
-
-              {/* Eraser Tool */}
-              <TouchableOpacity
-                style={[
-                  styles.toolButton,
-                  currentTool === 'eraser' && styles.activeToolButton
-                ]}
-                onPress={() => {
-                  setCurrentTool('eraser');
-                  handleToolInteraction();
-                }}
-              >
-                <Feather name="square" size={20} color={currentTool === 'eraser' ? '#6366f1' : '#64748b'} />
-              </TouchableOpacity>
-
-              {/* Color Swatches Grid - matching Figma design */}
-              <View style={styles.colorSwatchesContainer}>
-                {/* Create rows of 2 colors each */}
-                {Array.from({ length: Math.ceil(colors.length / 2) }, (_, rowIndex) => (
-                  <View key={rowIndex} style={styles.colorSwatchRow}>
-                    {colors.slice(rowIndex * 2, rowIndex * 2 + 2).map((color) => (
-                      <TouchableOpacity
-                        key={color}
-                        style={[
-                          styles.colorSwatch,
-                          { backgroundColor: color },
-                          currentColor === color && styles.selectedColorSwatch,
-                        ]}
-                        onPress={() => {
-                          setCurrentColor(color);
-                          handleToolInteraction();
-                        }}
-                      />
-                    ))}
-                  </View>
-                ))}
-              </View>
-
-              {/* Custom Color Picker Button */}
-              <TouchableOpacity
-                style={[styles.toolButton, { marginTop: 4 }]}
-                onPress={() => {
-                  setShowColorPicker(true);
-                  handleToolInteraction();
-                }}
-              >
-                <Feather name="plus-circle" size={20} color="#64748b" />
-              </TouchableOpacity>
-
-              {/* Brush Size Slider */}
-              <View style={styles.sizeControlVertical}>
-                <Text style={styles.sizeTextSmall}>{Math.round(currentBrushSize)}</Text>
-                <Slider
-                  style={styles.verticalSlider}
-                  value={currentBrushSize}
-                  onValueChange={setCurrentBrushSize}
-                  minimumValue={2}
-                  maximumValue={50}
-                  step={1}
-                  minimumTrackTintColor="#6366f1"
-                  maximumTrackTintColor="#e5e7eb"
-                  onSlidingStart={handleToolInteraction}
-                />
-              </View>
-            </ScrollView>
-          </Animated.View>
+          </View>
 
         </SafeAreaView>
+
         {/* Color Picker Modal */}
         <Modal
           visible={showColorPicker}
@@ -616,11 +584,14 @@ export default function FullscreenCanvas({
           animationType="fade"
           onRequestClose={() => setShowColorPicker(false)}
         >
-          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowColorPicker(false)}>
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowColorPicker(false)}
+          >
             <View style={styles.colorPickerModal}>
-              <Text style={styles.colorPickerTitle}>Pick a Color</Text>
+              <Text style={styles.modalTitle}>Pick a Color</Text>
               <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Predefined color swatches */}
                 <View style={styles.colorGrid}>
                   {colors.map((color) => (
                     <TouchableOpacity
@@ -639,16 +610,7 @@ export default function FullscreenCanvas({
                 </View>
 
                 {/* Custom color picker with spectrum */}
-                <View style={{
-                  backgroundColor: 'white',
-                  borderRadius: 12,
-                  padding: 16,
-                  marginTop: 16,
-                  elevation: 4,
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4
-                }}>
+                <View style={styles.customColorPickerContainer}>
                   <CustomColorPicker
                     selectedColor={currentColor}
                     onColorChange={(color) => {
@@ -661,6 +623,53 @@ export default function FullscreenCanvas({
             </View>
           </TouchableOpacity>
         </Modal>
+
+        {/* Size Picker Modal */}
+        <Modal
+          visible={showSizePicker}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowSizePicker(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowSizePicker(false)}
+          >
+            <View style={styles.sizePickerModal}>
+              <Text style={styles.modalTitle}>Brush Size</Text>
+              <View style={styles.sizePreviewLarge}>
+                <View
+                  style={[
+                    styles.sizeCircleLarge,
+                    {
+                      width: Math.max(10, Math.min(100, currentBrushSize * 2)),
+                      height: Math.max(10, Math.min(100, currentBrushSize * 2)),
+                      backgroundColor: currentColor,
+                    }
+                  ]}
+                />
+              </View>
+              <Text style={styles.sizeValueText}>{Math.round(currentBrushSize)}px</Text>
+              <Slider
+                style={styles.sizeSlider}
+                value={currentBrushSize}
+                onValueChange={setCurrentBrushSize}
+                minimumValue={2}
+                maximumValue={50}
+                step={1}
+                minimumTrackTintColor="#6366f1"
+                maximumTrackTintColor="#e5e7eb"
+              />
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowSizePicker(false)}
+              >
+                <Text style={styles.modalCloseButtonText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </View>
     </Modal>
   );
@@ -669,35 +678,104 @@ export default function FullscreenCanvas({
 const styles = StyleSheet.create({
   fullscreenContainer: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#e5e5e5',
   },
   safeArea: {
     flex: 1,
-    flexDirection: 'row', // Horizontal layout for sidebar and content
+    flexDirection: 'row',
   },
-  canvasSection: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 0,
-    paddingVertical: 0,
+
+  // Left Sidebar
+  leftSidebar: {
+    width: 150,
+    backgroundColor: 'transparent',
+    paddingTop: 16,
+    paddingHorizontal: 12,
+    paddingBottom: 16,
   },
-  canvasContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    overflow: 'hidden',
-    width: '100%',
-    height: '100%',
-    maxWidth: '95%',
-    maxHeight: '95%',
+  toolButtonLeft: {
+    backgroundColor: '#6366f1',
+    borderRadius: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
+    gap: 8,
+  },
+  toolButtonLeftActive: {
+    backgroundColor: '#4f46e5',
+    shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
-    margin: 12,
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  toolButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  previewContainer: {
+    marginTop: 16,
+  },
+  previewLabel: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 6,
+  },
+  colorPreview: {
+    width: 120,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+  },
+  sizePreview: {
+    width: 120,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sizeCircle: {
+    backgroundColor: '#6366f1',
+    borderRadius: 100,
+  },
+
+  // Main Content
+  mainContent: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  topActionBar: {
+    height: 60,
+    backgroundColor: '#6366f1',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  actionButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 12,
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveActionButton: {
+    backgroundColor: '#10b981',
+  },
+  canvasArea: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
   },
   emptyCanvas: {
     backgroundColor: '#f8fafc',
@@ -709,6 +787,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     minWidth: 300,
     minHeight: 200,
+    padding: 20,
   },
   emptyCanvasText: {
     color: '#64748b',
@@ -716,171 +795,32 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Top center toolbar
-  topCenterActionsContainer: {
-    position: 'absolute',
-    top: 16,
-    left: 0,
-    right: 0,
+  // Right Side
+  rightSide: {
+    width: 80,
+    paddingTop: 80,
+    paddingHorizontal: 16,
     alignItems: 'center',
-    zIndex: 10,
   },
-  topCenterActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  topActionButton: {
-    backgroundColor: '#6366f1',
-    borderRadius: 14,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: 90,
-    justifyContent: 'center',
-  },
-  topActionButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  saveButton: {
-    backgroundColor: '#10b981',
-    borderRadius: 14,
-    paddingHorizontal: 22,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: 90,
-    justifyContent: 'center',
-  },
-  saveButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  // Right sidebar toolbar
-  rightToolbarContainer: {
-    position: 'absolute',
-    right: 16,
-    top: '50%',
-    transform: [{ translateY: -250 }],
-    zIndex: 10,
-  },
-  toolColumn: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  toolButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: '#f8fafc',
+  playButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
+    marginBottom: 16,
   },
-  activeToolButton: {
-    backgroundColor: '#ffffff',
-    borderColor: '#6366f1',
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
+  quickSwatches: {
+    gap: 12,
   },
-  colorPickerToolButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: '#f8fafc',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 6,
-  },
-  colorPreviewLarge: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  colorSwatchesContainer: {
-    gap: 6,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    maxHeight: 300,
-  },
-  colorSwatchRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  colorSwatch: {
+  quickSwatch: {
     width: 40,
     height: 40,
     borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#e5e7eb',
-  },
-  selectedColorSwatch: {
-    borderWidth: 3,
-    borderColor: '#6366f1',
-    transform: [{ scale: 1.05 }],
   },
 
-  // Size Control (Vertical)
-  sizeControlVertical: {
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    marginTop: 4,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    width: '100%',
-  },
-  sizeTextSmall: {
-    color: '#1f2937',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  verticalSlider: {
-    width: 40,
-    height: 100,
-  },
-
-
-
-  // Color Picker Modal
+  // Modals
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -890,7 +830,7 @@ const styles = StyleSheet.create({
   colorPickerModal: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
-    padding: 16,
+    padding: 20,
     margin: 20,
     maxHeight: '85%',
     minWidth: 320,
@@ -901,12 +841,12 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 16,
   },
-  colorPickerTitle: {
-    fontSize: 16,
+  modalTitle: {
+    fontSize: 18,
     fontWeight: '700',
     color: '#1f2937',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   colorGrid: {
     flexDirection: 'row',
@@ -917,9 +857,9 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   colorOption: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 2,
     borderColor: 'rgba(17,24,39,0.08)',
     shadowColor: '#000',
@@ -929,7 +869,68 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   selectedColorOption: {
-    borderColor: '#4f46e5',
-    transform: [{ scale: 1.12 }],
+    borderColor: '#6366f1',
+    borderWidth: 3,
+    transform: [{ scale: 1.1 }],
+  },
+  customColorPickerContainer: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+
+  // Size Picker Modal
+  sizePickerModal: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 24,
+    margin: 20,
+    minWidth: 320,
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 16,
+  },
+  sizePreviewLarge: {
+    width: '100%',
+    height: 120,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 16,
+  },
+  sizeCircleLarge: {
+    borderRadius: 100,
+  },
+  sizeValueText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  sizeSlider: {
+    width: '100%',
+    height: 40,
+  },
+  modalCloseButton: {
+    backgroundColor: '#6366f1',
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  modalCloseButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
