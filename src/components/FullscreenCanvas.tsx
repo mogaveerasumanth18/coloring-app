@@ -220,6 +220,25 @@ export default function FullscreenCanvas({
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
 
+  // Zoom functions
+  const handleZoomIn = () => {
+    const newScale = Math.min(scale.value + 0.5, 4);
+    scale.value = withSpring(newScale);
+    savedScale.value = newScale;
+  };
+
+  const handleZoomOut = () => {
+    const newScale = Math.max(scale.value - 0.5, 1);
+    scale.value = withSpring(newScale);
+    savedScale.value = newScale;
+    if (newScale === 1) {
+      translateX.value = withSpring(0);
+      translateY.value = withSpring(0);
+      savedTranslateX.value = 0;
+      savedTranslateY.value = 0;
+    }
+  };
+
   // Reset zoom when switching away from move tool
   useEffect(() => {
     if (currentTool !== 'move') {
@@ -585,6 +604,22 @@ export default function FullscreenCanvas({
               {/* Spacer to push buttons to the right */}
               <View style={{ flex: 1 }} />
 
+              {/* Zoom Out */}
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleZoomOut}
+              >
+                <Ionicons name="remove" size={24} color="#ffffff" />
+              </TouchableOpacity>
+
+              {/* Zoom In */}
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleZoomIn}
+              >
+                <Ionicons name="add" size={24} color="#ffffff" />
+              </TouchableOpacity>
+
               {/* Undo */}
               <TouchableOpacity
                 style={styles.actionButton}
@@ -699,59 +734,54 @@ export default function FullscreenCanvas({
           animationType="fade"
           onRequestClose={() => setShowColorPicker(false)}
         >
-          <Pressable
-            style={styles.modalOverlay}
-            onPress={() => setShowColorPicker(false)}
-          >
+          <View style={styles.modalOverlay}>
             <Pressable
-              onPress={(e) => {
-                // Prevent modal from closing when pressing inside
-              }}
-            >
-              <View style={styles.colorPickerModal} pointerEvents="box-none">
-                <Text style={styles.modalTitle}>Pick a Color</Text>
-                <ScrollView showsVerticalScrollIndicator={false} pointerEvents="box-none">
-                  <View style={styles.colorGrid} pointerEvents="auto">
-                    {colors.map((color) => (
-                      <TouchableOpacity
-                        key={color}
-                        style={[
-                          styles.colorOption,
-                          { backgroundColor: color },
-                          currentColor === color && styles.selectedColorOption,
-                        ]}
-                        onPress={() => {
-                          console.log('Color selected:', color);
-                          setCurrentColor(color);
-                          setShowColorPicker(false);
-                        }}
-                      />
-                    ))}
-                  </View>
-
-                  {/* Custom color picker with spectrum */}
-                  <View style={styles.customColorPickerContainer} pointerEvents="auto">
-                    <CustomColorPicker
-                      selectedColor={currentColor}
-                      onColorChange={(color) => {
-                        console.log('Custom color selected:', color);
+              style={StyleSheet.absoluteFill}
+              onPress={() => setShowColorPicker(false)}
+            />
+            <View style={styles.colorPickerModal}>
+              <Text style={styles.modalTitle}>Pick a Color</Text>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.colorGrid}>
+                  {colors.map((color) => (
+                    <TouchableOpacity
+                      key={color}
+                      style={[
+                        styles.colorOption,
+                        { backgroundColor: color },
+                        currentColor === color && styles.selectedColorOption,
+                      ]}
+                      onPress={() => {
+                        console.log('Color selected:', color);
                         setCurrentColor(color);
                         setShowColorPicker(false);
                       }}
                     />
-                  </View>
-                </ScrollView>
+                  ))}
+                </View>
 
-                {/* Close Button */}
-                <TouchableOpacity
-                  style={styles.modalCloseButton}
-                  onPress={() => setShowColorPicker(false)}
-                >
-                  <Text style={styles.modalCloseButtonText}>Close</Text>
-                </TouchableOpacity>
-              </View>
-            </Pressable>
-          </Pressable>
+                {/* Custom color picker with spectrum */}
+                <View style={styles.customColorPickerContainer}>
+                  <CustomColorPicker
+                    selectedColor={currentColor}
+                    onColorChange={(color) => {
+                      console.log('Custom color selected:', color);
+                      setCurrentColor(color);
+                      setShowColorPicker(false);
+                    }}
+                  />
+                </View>
+              </ScrollView>
+
+              {/* Close Button */}
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowColorPicker(false)}
+              >
+                <Text style={styles.modalCloseButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </Modal>
 
         {/* Size Picker Modal */}
@@ -761,49 +791,44 @@ export default function FullscreenCanvas({
           animationType="fade"
           onRequestClose={() => setShowSizePicker(false)}
         >
-          <Pressable
-            style={styles.modalOverlay}
-            onPress={() => setShowSizePicker(false)}
-          >
+          <View style={styles.modalOverlay}>
             <Pressable
-              onPress={(e) => {
-                // Prevent modal from closing when pressing inside
-              }}
-            >
-              <View style={styles.sizePickerModal} pointerEvents="box-none">
-                <Text style={styles.modalTitle}>Brush Size</Text>
-                <View style={styles.sizePreviewLarge}>
-                  <View
-                    style={[
-                      styles.sizeCircleLarge,
-                      {
-                        width: Math.max(10, Math.min(100, currentBrushSize * 2)),
-                        height: Math.max(10, Math.min(100, currentBrushSize * 2)),
-                        backgroundColor: currentColor,
-                      }
-                    ]}
-                  />
-                </View>
-                <Text style={styles.sizeValueText}>{Math.round(currentBrushSize)}px</Text>
-                <Slider
-                  style={styles.sizeSlider}
-                  value={currentBrushSize}
-                  onValueChange={setCurrentBrushSize}
-                  minimumValue={2}
-                  maximumValue={50}
-                  step={1}
-                  minimumTrackTintColor="#6366f1"
-                  maximumTrackTintColor="#e5e7eb"
+              style={StyleSheet.absoluteFill}
+              onPress={() => setShowSizePicker(false)}
+            />
+            <View style={styles.sizePickerModal}>
+              <Text style={styles.modalTitle}>Brush Size</Text>
+              <View style={styles.sizePreviewLarge}>
+                <View
+                  style={[
+                    styles.sizeCircleLarge,
+                    {
+                      width: Math.max(10, Math.min(100, currentBrushSize * 2)),
+                      height: Math.max(10, Math.min(100, currentBrushSize * 2)),
+                      backgroundColor: currentColor,
+                    }
+                  ]}
                 />
-                <TouchableOpacity
-                  style={styles.modalCloseButton}
-                  onPress={() => setShowSizePicker(false)}
-                >
-                  <Text style={styles.modalCloseButtonText}>Done</Text>
-                </TouchableOpacity>
               </View>
-            </Pressable>
-          </Pressable>
+              <Text style={styles.sizeValueText}>{Math.round(currentBrushSize)}px</Text>
+              <Slider
+                style={styles.sizeSlider}
+                value={currentBrushSize}
+                onValueChange={setCurrentBrushSize}
+                minimumValue={2}
+                maximumValue={50}
+                step={1}
+                minimumTrackTintColor="#6366f1"
+                maximumTrackTintColor="#e5e7eb"
+              />
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowSizePicker(false)}
+              >
+                <Text style={styles.modalCloseButtonText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </Modal>
       </View>
     </Modal>
