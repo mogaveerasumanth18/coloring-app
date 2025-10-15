@@ -690,27 +690,26 @@ export default function FullscreenCanvas({
                       height: computeFit(canvasSize, templateSize).height,
                     }}
                   >
-                    <GestureDetector gesture={composedGesture}>
-                      <Reanimated.View
-                        style={[
-                          styles.canvasWrapper,
-                          animatedCanvasStyle,
-                          {
-                            width: computeFit(canvasSize, templateSize).width,
-                            height: computeFit(canvasSize, templateSize).height,
-                          }
-                        ]}
-                      >
-                        <View
-                          ref={captureViewRef}
-                          collapsable={false}
-                          style={{
-                            width: computeFit(canvasSize, templateSize).width,
-                            height: computeFit(canvasSize, templateSize).height,
-                          }}
-                          pointerEvents={currentTool === 'move' ? 'none' : 'auto'}
+                    {Platform.OS === 'web' ? (
+                      <GestureDetector gesture={composedGesture}>
+                        <Reanimated.View
+                          style={[
+                            styles.canvasWrapper,
+                            animatedCanvasStyle,
+                            {
+                              width: computeFit(canvasSize, templateSize).width,
+                              height: computeFit(canvasSize, templateSize).height,
+                            }
+                          ]}
                         >
-                          {Platform.OS === 'web' ? (
+                          <View
+                            ref={captureViewRef}
+                            collapsable={false}
+                            style={{
+                              width: computeFit(canvasSize, templateSize).width,
+                              height: computeFit(canvasSize, templateSize).height,
+                            }}
+                          >
                             <WorkingColoringCanvas
                               selectedColor={currentColor}
                               selectedTool={currentTool === 'move' ? 'brush' : currentTool}
@@ -719,7 +718,28 @@ export default function FullscreenCanvas({
                               width={computeFit(canvasSize, templateSize).width}
                               height={computeFit(canvasSize, templateSize).height}
                             />
-                          ) : (
+                          </View>
+                        </Reanimated.View>
+                      </GestureDetector>
+                    ) : (
+                      <GestureDetector gesture={composedGesture}>
+                        <Reanimated.View
+                          style={[
+                            animatedCanvasStyle,
+                            {
+                              width: computeFit(canvasSize, templateSize).width,
+                              height: computeFit(canvasSize, templateSize).height,
+                            }
+                          ]}
+                        >
+                          <View
+                            ref={captureViewRef}
+                            collapsable={false}
+                            style={{
+                              width: computeFit(canvasSize, templateSize).width,
+                              height: computeFit(canvasSize, templateSize).height,
+                            }}
+                          >
                             <NativeZebraCanvas
                               key={`canvas-${currentTool}-${currentColor}-${currentBrushSize}`}
                               ref={canvasRef}
@@ -733,10 +753,10 @@ export default function FullscreenCanvas({
                               initialDataUrl={initialCanvasData}
                               interactionEnabled={currentTool !== 'move'}
                             />
-                          )}
-                        </View>
-                      </Reanimated.View>
-                    </GestureDetector>
+                          </View>
+                        </Reanimated.View>
+                      </GestureDetector>
+                    )}
                   </View>
                 )
               ) : (
