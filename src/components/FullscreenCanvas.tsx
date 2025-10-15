@@ -684,48 +684,60 @@ export default function FullscreenCanvas({
                     <Text style={styles.emptyCanvasText}>Loading image…</Text>
                   </View>
                 ) : (
-                  <GestureDetector gesture={composedGesture}>
-                    <Reanimated.View
-                      style={[
-                        styles.canvasWrapper,
-                        animatedCanvasStyle
-                      ]}
-                    >
-                      <View
-                        ref={captureViewRef}
-                        collapsable={false}
-                        style={{
-                          width: computeFit(canvasSize, templateSize).width,
-                          height: computeFit(canvasSize, templateSize).height,
-                        }}
+                  <View
+                    style={{
+                      width: computeFit(canvasSize, templateSize).width,
+                      height: computeFit(canvasSize, templateSize).height,
+                    }}
+                  >
+                    <GestureDetector gesture={composedGesture}>
+                      <Reanimated.View
+                        style={[
+                          styles.canvasWrapper,
+                          animatedCanvasStyle,
+                          {
+                            width: computeFit(canvasSize, templateSize).width,
+                            height: computeFit(canvasSize, templateSize).height,
+                          }
+                        ]}
                       >
-                        {Platform.OS === 'web' ? (
-                          <WorkingColoringCanvas
-                            selectedColor={currentColor}
-                            selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                            brushSize={currentBrushSize}
-                            templateUri={templateUri}
-                            width={computeFit(canvasSize, templateSize).width}
-                            height={computeFit(canvasSize, templateSize).height}
-                          />
-                        ) : (
-                          <NativeZebraCanvas
-                            key={`canvas-${currentTool}-${currentColor}-${currentBrushSize}`}
-                            ref={canvasRef}
-                            templateUri={templateUri}
-                            selectedColor={currentColor}
-                            selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                            brushWidth={currentBrushSize}
-                            onColoringComplete={onColoringComplete}
-                            width={computeFit(canvasSize, templateSize).width}
-                            height={computeFit(canvasSize, templateSize).height}
-                            initialDataUrl={initialCanvasData}
-                            interactionEnabled={currentTool !== 'move'}
-                          />
-                        )}
-                      </View>
-                    </Reanimated.View>
-                  </GestureDetector>
+                        <View
+                          ref={captureViewRef}
+                          collapsable={false}
+                          style={{
+                            width: computeFit(canvasSize, templateSize).width,
+                            height: computeFit(canvasSize, templateSize).height,
+                          }}
+                          pointerEvents={currentTool === 'move' ? 'none' : 'auto'}
+                        >
+                          {Platform.OS === 'web' ? (
+                            <WorkingColoringCanvas
+                              selectedColor={currentColor}
+                              selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                              brushSize={currentBrushSize}
+                              templateUri={templateUri}
+                              width={computeFit(canvasSize, templateSize).width}
+                              height={computeFit(canvasSize, templateSize).height}
+                            />
+                          ) : (
+                            <NativeZebraCanvas
+                              key={`canvas-${currentTool}-${currentColor}-${currentBrushSize}`}
+                              ref={canvasRef}
+                              templateUri={templateUri}
+                              selectedColor={currentColor}
+                              selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                              brushWidth={currentBrushSize}
+                              onColoringComplete={onColoringComplete}
+                              width={computeFit(canvasSize, templateSize).width}
+                              height={computeFit(canvasSize, templateSize).height}
+                              initialDataUrl={initialCanvasData}
+                              interactionEnabled={currentTool !== 'move'}
+                            />
+                          )}
+                        </View>
+                      </Reanimated.View>
+                    </GestureDetector>
+                  </View>
                 )
               ) : (
                 <View style={styles.emptyCanvas}>
