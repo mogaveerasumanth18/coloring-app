@@ -251,9 +251,8 @@ export default function FullscreenCanvas({
     }
   }, [currentTool]);
 
-  // Pinch gesture for zooming (only active when move tool is selected)
+  // Pinch gesture for zooming
   const pinchGesture = Gesture.Pinch()
-    .enabled(currentTool === 'move')
     .onStart(() => {
       savedScale.value = scale.value;
     })
@@ -261,33 +260,43 @@ export default function FullscreenCanvas({
       scale.value = Math.max(1, Math.min(savedScale.value * event.scale, 4));
     })
     .onEnd(() => {
-      if (scale.value < 1) {
-        scale.value = withSpring(1);
+      const clamped = Math.max(1, Math.min(4, scale.value));
+      scale.value = withSpring(clamped);
+      savedScale.value = clamped;
+      if (clamped === 1) {
         translateX.value = withSpring(0);
         translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
       }
     });
 
-  // Pan gesture for moving (only active when move tool is selected)
+  // Pan gesture for moving - enabled when move tool is selected OR when zoomed in
   const panGesture = Gesture.Pan()
-    .enabled(currentTool === 'move')
+    .minPointers(currentTool === 'move' ? 1 : 2)
     .onStart(() => {
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     })
     .onUpdate((event) => {
-      translateX.value = savedTranslateX.value + event.translationX;
-      translateY.value = savedTranslateY.value + event.translationY;
+      // Allow panning when zoomed in or in explicit move mode
+      const allow = scale.value > 1 || currentTool === 'move';
+      if (allow) {
+        translateX.value = savedTranslateX.value + event.translationX;
+        translateY.value = savedTranslateY.value + event.translationY;
+      }
     })
     .onEnd(() => {
-      // Constrain to prevent panning too far
-      const maxTranslate = 200 * (scale.value - 1);
+      // Constrain to prevent panning too far based on zoom level
+      const maxTranslate = 300 * (scale.value - 1);
       if (Math.abs(translateX.value) > maxTranslate) {
         translateX.value = withSpring(Math.sign(translateX.value) * maxTranslate);
       }
       if (Math.abs(translateY.value) > maxTranslate) {
         translateY.value = withSpring(Math.sign(translateY.value) * maxTranslate);
       }
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
     });
 
   // Combine gestures for simultaneous pinch and pan
@@ -677,17 +686,18 @@ export default function FullscreenCanvas({
                 ) : (
                   <GestureDetector gesture={composedGesture}>
                     <Reanimated.View
-                      style={[animatedCanvasStyle]}
+                      style={[
+                        styles.canvasWrapper,
+                        animatedCanvasStyle
+                      ]}
                     >
                       <View
                         ref={captureViewRef}
                         collapsable={false}
-                        style={[
-                          {
-                            width: computeFit(canvasSize, templateSize).width,
-                            height: computeFit(canvasSize, templateSize).height,
-                          }
-                        ]}
+                        style={{
+                          width: computeFit(canvasSize, templateSize).width,
+                          height: computeFit(canvasSize, templateSize).height,
+                        }}
                       >
                         {Platform.OS === 'web' ? (
                           <WorkingColoringCanvas
@@ -941,6 +951,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
+    overflow: 'hidden',
+  },
+  canvasWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyCanvas: {
     backgroundColor: '#f8fafc',
