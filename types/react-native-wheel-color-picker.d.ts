@@ -1,6 +1,7 @@
 declare module 'react-native-wheel-color-picker' {
   import { Component } from 'react';
-  
+  import { ViewStyle } from 'react-native';
+
   export interface ColorPickerProps {
     color?: string;
     onColorChange?: (color: string) => void;
@@ -10,15 +11,16 @@ declare module 'react-native-wheel-color-picker' {
     noSnap?: boolean;
     row?: boolean;
     swatches?: boolean;
-    swatchesLast?: boolean;
     swatchesOnly?: boolean;
     discrete?: boolean;
-    wheelLodingIndicator?: React.ReactNode;
-    sliderLodingIndicator?: React.ReactNode;
+    wheelLodingIndicator?: any;
+    sliderLodingIndicator?: any;
     useNativeDriver?: boolean;
     useNativeLayout?: boolean;
-    palette?: string[];
+    style?: ViewStyle;
+    gapSize?: number;
+    autoResetSlider?: boolean;
   }
-  
+
   export default class ColorPicker extends Component<ColorPickerProps> {}
 }

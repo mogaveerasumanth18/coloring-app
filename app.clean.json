@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "ColorSplash Kids",
+    "slug": "coloring-book-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#EEF2FF"
+    },
+    "assetBundlePatterns": [
+      "**/*",
+      "src/assets/templates/*.png"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.coloringbook",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to save colored images.",
+        "NSPhotoLibraryAddUsageDescription": "This app needs permission to save colored images to your photo library.",
+        "UISupportsDocumentBrowser": true
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#EEF2FF"
+      },
+      "package": "com.yourcompany.coloringbook",
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow ColorSplash Kids to save your colored images.",
+          "savePhotosPermission": "Allow ColorSplash Kids to save colored images to your photo library.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow ColorSplash Kids to access your photos to convert them to coloring templates.",
+          "cameraPermission": "Allow ColorSplash Kids to take photos to convert them to coloring templates."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id-here"
+      }
+    }
+  }
+}

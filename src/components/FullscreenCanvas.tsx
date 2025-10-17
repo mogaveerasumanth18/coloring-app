@@ -136,7 +136,7 @@ const CustomColorPicker = ({
   onColorChange: (color: string) => void;
 }) => {
   return (
-    <View style={{ padding: 16 }}>
+    <View style={{ padding: 16 }} pointerEvents="box-none">
       {/* Color Preview */}
       <View style={{
         width: '100%',
@@ -151,7 +151,7 @@ const CustomColorPicker = ({
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 2,
-      }} />
+      }} pointerEvents="box-none" />
 
       {/* Clean Color Wheel - Only the wheel, no slider or extra elements */}
       <View style={{
@@ -160,10 +160,11 @@ const CustomColorPicker = ({
         alignItems: 'center',
         justifyContent: 'center',
         overflow: 'hidden',
-      }}>
+      }} pointerEvents="box-none">
         <ColorPicker
           color={selectedColor}
           onColorChange={(color: string) => {
+            console.log('Color picker value changed:', color);
             onColorChange(color);
           }}
           thumbSize={30}
@@ -175,6 +176,8 @@ const CustomColorPicker = ({
           discrete={false}
           useNativeDriver={true}
           useNativeLayout={false}
+          gapSize={0}
+          autoResetSlider={false}
         />
       </View>
     </View>
@@ -274,6 +277,7 @@ export default function FullscreenCanvas({
   // Pan gesture for moving - enabled when move tool is selected OR when zoomed in
   const panGesture = Gesture.Pan()
     .minPointers(currentTool === 'move' ? 1 : 2)
+    .enableTrackpadTwoFingerGesture(true)
     .onStart(() => {
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
@@ -677,6 +681,7 @@ export default function FullscreenCanvas({
                 const { width, height } = e.nativeEvent.layout;
                 if (width && height) setCanvasSize({ width, height });
               }}
+              pointerEvents={currentTool === 'move' ? 'none' : 'auto'}
             >
               {templateUri ? (
                 !templateSize ? (
@@ -684,14 +689,14 @@ export default function FullscreenCanvas({
                     <Text style={styles.emptyCanvasText}>Loading image…</Text>
                   </View>
                 ) : (
-                  <View
-                    style={{
-                      width: computeFit(canvasSize, templateSize).width,
-                      height: computeFit(canvasSize, templateSize).height,
-                    }}
-                  >
-                    {Platform.OS === 'web' ? (
-                      <GestureDetector gesture={composedGesture}>
+                  <GestureDetector gesture={composedGesture}>
+                    <View
+                      style={{
+                        width: computeFit(canvasSize, templateSize).width,
+                        height: computeFit(canvasSize, templateSize).height,
+                      }}
+                    >
+                      {Platform.OS === 'web' ? (
                         <Reanimated.View
                           style={[
                             styles.canvasWrapper,
@@ -720,9 +725,7 @@ export default function FullscreenCanvas({
                             />
                           </View>
                         </Reanimated.View>
-                      </GestureDetector>
-                    ) : (
-                      <GestureDetector gesture={composedGesture}>
+                      ) : (
                         <Reanimated.View
                           style={[
                             animatedCanvasStyle,
@@ -755,9 +758,9 @@ export default function FullscreenCanvas({
                             />
                           </View>
                         </Reanimated.View>
-                      </GestureDetector>
-                    )}
-                  </View>
+                      )}
+                    </View>
+                  </GestureDetector>
                 )
               ) : (
                 <View style={styles.emptyCanvas}>
@@ -783,7 +786,7 @@ export default function FullscreenCanvas({
             />
             <View style={styles.colorPickerModal}>
               <Text style={styles.modalTitle}>Pick a Color</Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <ScrollView showsVerticalScrollIndicator={false} scrollEventThrottle={16}>
                 <View style={styles.colorGrid}>
                   {colors.map((color) => (
                     <TouchableOpacity
@@ -796,7 +799,7 @@ export default function FullscreenCanvas({
                       onPress={() => {
                         console.log('Color selected:', color);
                         setCurrentColor(color);
-                        setShowColorPicker(false);
+                        // Don't close modal on preset color selection - let user pick more if they want
                       }}
                     />
                   ))}
@@ -809,7 +812,7 @@ export default function FullscreenCanvas({
                     onColorChange={(color) => {
                       console.log('Custom color selected:', color);
                       setCurrentColor(color);
-                      setShowColorPicker(false);
+                      // Don't close modal on wheel interaction - let user fine-tune
                     }}
                   />
                 </View>
@@ -820,7 +823,7 @@ export default function FullscreenCanvas({
                 style={styles.modalCloseButton}
                 onPress={() => setShowColorPicker(false)}
               >
-                <Text style={styles.modalCloseButtonText}>Close</Text>
+                <Text style={styles.modalCloseButtonText}>Done</Text>
               </TouchableOpacity>
             </View>
           </View>
