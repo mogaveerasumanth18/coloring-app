@@ -681,7 +681,6 @@ export default function FullscreenCanvas({
                 const { width, height } = e.nativeEvent.layout;
                 if (width && height) setCanvasSize({ width, height });
               }}
-              pointerEvents={currentTool === 'move' ? 'none' : 'auto'}
             >
               {templateUri ? (
                 !templateSize ? (
@@ -690,76 +689,57 @@ export default function FullscreenCanvas({
                   </View>
                 ) : (
                   <GestureDetector gesture={composedGesture}>
-                    <View
-                      style={{
-                        width: computeFit(canvasSize, templateSize).width,
-                        height: computeFit(canvasSize, templateSize).height,
-                      }}
+                    <Reanimated.View
+                      style={[
+                        {
+                          width: computeFit(canvasSize, templateSize).width,
+                          height: computeFit(canvasSize, templateSize).height,
+                        },
+                        animatedCanvasStyle,
+                      ]}
                     >
                       {Platform.OS === 'web' ? (
-                        <Reanimated.View
-                          style={[
-                            styles.canvasWrapper,
-                            animatedCanvasStyle,
-                            {
-                              width: computeFit(canvasSize, templateSize).width,
-                              height: computeFit(canvasSize, templateSize).height,
-                            }
-                          ]}
+                        <View
+                          ref={captureViewRef}
+                          collapsable={false}
+                          style={{
+                            width: computeFit(canvasSize, templateSize).width,
+                            height: computeFit(canvasSize, templateSize).height,
+                          }}
                         >
-                          <View
-                            ref={captureViewRef}
-                            collapsable={false}
-                            style={{
-                              width: computeFit(canvasSize, templateSize).width,
-                              height: computeFit(canvasSize, templateSize).height,
-                            }}
-                          >
-                            <WorkingColoringCanvas
-                              selectedColor={currentColor}
-                              selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                              brushSize={currentBrushSize}
-                              templateUri={templateUri}
-                              width={computeFit(canvasSize, templateSize).width}
-                              height={computeFit(canvasSize, templateSize).height}
-                            />
-                          </View>
-                        </Reanimated.View>
+                          <WorkingColoringCanvas
+                            selectedColor={currentColor}
+                            selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                            brushSize={currentBrushSize}
+                            templateUri={templateUri}
+                            width={computeFit(canvasSize, templateSize).width}
+                            height={computeFit(canvasSize, templateSize).height}
+                          />
+                        </View>
                       ) : (
-                        <Reanimated.View
-                          style={[
-                            animatedCanvasStyle,
-                            {
-                              width: computeFit(canvasSize, templateSize).width,
-                              height: computeFit(canvasSize, templateSize).height,
-                            }
-                          ]}
+                        <View
+                          ref={captureViewRef}
+                          collapsable={false}
+                          style={{
+                            width: computeFit(canvasSize, templateSize).width,
+                            height: computeFit(canvasSize, templateSize).height,
+                          }}
                         >
-                          <View
-                            ref={captureViewRef}
-                            collapsable={false}
-                            style={{
-                              width: computeFit(canvasSize, templateSize).width,
-                              height: computeFit(canvasSize, templateSize).height,
-                            }}
-                          >
-                            <NativeZebraCanvas
-                              key={`canvas-${currentTool}-${currentColor}-${currentBrushSize}`}
-                              ref={canvasRef}
-                              templateUri={templateUri}
-                              selectedColor={currentColor}
-                              selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                              brushWidth={currentBrushSize}
-                              onColoringComplete={onColoringComplete}
-                              width={computeFit(canvasSize, templateSize).width}
-                              height={computeFit(canvasSize, templateSize).height}
-                              initialDataUrl={initialCanvasData}
-                              interactionEnabled={currentTool !== 'move'}
-                            />
-                          </View>
-                        </Reanimated.View>
+                          <NativeZebraCanvas
+                            ref={canvasRef}
+                            templateUri={templateUri}
+                            selectedColor={currentColor}
+                            selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                            brushWidth={currentBrushSize}
+                            onColoringComplete={onColoringComplete}
+                            width={computeFit(canvasSize, templateSize).width}
+                            height={computeFit(canvasSize, templateSize).height}
+                            initialDataUrl={initialCanvasData}
+                            interactionEnabled={currentTool !== 'move'}
+                          />
+                        </View>
                       )}
-                    </View>
+                    </Reanimated.View>
                   </GestureDetector>
                 )
               ) : (
