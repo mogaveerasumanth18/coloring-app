@@ -27,7 +27,7 @@ import { ZebraColoringCanvas } from './ZebraColoringCanvas';
 import { NativeZebraCanvas } from './NativeZebraCanvas';
 import ColorPicker from 'react-native-wheel-color-picker';
 import { GestureHandlerRootView, PinchGestureHandler, PanGestureHandler, GestureDetector, Gesture } from 'react-native-gesture-handler';
-import { useSharedValue, useAnimatedGestureHandler, runOnJS, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { useSharedValue, useAnimatedGestureHandler, runOnJS, useAnimatedStyle, withSpring, useAnimatedReaction } from 'react-native-reanimated';
 import Reanimated from 'react-native-reanimated';
 
 interface FullscreenCanvasProps {
@@ -210,6 +210,7 @@ export default function FullscreenCanvas({
   const [currentBrushSize, setCurrentBrushSize] = useState(brushSize);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showSizePicker, setShowSizePicker] = useState(false);
+  const [currentScale, setCurrentScale] = useState(1);
   const canvasRef = useRef<any>(null);
   const captureViewRef = useRef<View>(null);
   const [templateSize, setTemplateSize] = useState<{ width: number; height: number } | null>(null);
@@ -226,20 +227,29 @@ export default function FullscreenCanvas({
   // Zoom functions
   const handleZoomIn = () => {
     const newScale = Math.min(scale.value + 0.5, 4);
-    scale.value = withSpring(newScale);
+    scale.value = withSpring(newScale, { damping: 15, stiffness: 150 });
     savedScale.value = newScale;
   };
 
   const handleZoomOut = () => {
     const newScale = Math.max(scale.value - 0.5, 1);
-    scale.value = withSpring(newScale);
+    scale.value = withSpring(newScale, { damping: 15, stiffness: 150 });
     savedScale.value = newScale;
     if (newScale === 1) {
-      translateX.value = withSpring(0);
-      translateY.value = withSpring(0);
+      translateX.value = withSpring(0, { damping: 15, stiffness: 150 });
+      translateY.value = withSpring(0, { damping: 15, stiffness: 150 });
       savedTranslateX.value = 0;
       savedTranslateY.value = 0;
     }
+  };
+
+  const handleResetZoom = () => {
+    scale.value = withSpring(1, { damping: 15, stiffness: 150 });
+    translateX.value = withSpring(0, { damping: 15, stiffness: 150 });
+    translateY.value = withSpring(0, { damping: 15, stiffness: 150 });
+    savedScale.value = 1;
+    savedTranslateX.value = 0;
+    savedTranslateY.value = 0;
   };
 
   // Reset zoom when switching away from move tool
@@ -260,15 +270,17 @@ export default function FullscreenCanvas({
       savedScale.value = scale.value;
     })
     .onUpdate((event) => {
-      scale.value = Math.max(1, Math.min(savedScale.value * event.scale, 4));
+      const newScale = Math.max(1, Math.min(savedScale.value * event.scale, 4));
+      scale.value = newScale;
     })
     .onEnd(() => {
       const clamped = Math.max(1, Math.min(4, scale.value));
-      scale.value = withSpring(clamped);
+      scale.value = withSpring(clamped, { damping: 15, stiffness: 150 });
       savedScale.value = clamped;
+
       if (clamped === 1) {
-        translateX.value = withSpring(0);
-        translateY.value = withSpring(0);
+        translateX.value = withSpring(0, { damping: 15, stiffness: 150 });
+        translateY.value = withSpring(0, { damping: 15, stiffness: 150 });
         savedTranslateX.value = 0;
         savedTranslateY.value = 0;
       }
@@ -278,33 +290,34 @@ export default function FullscreenCanvas({
   const panGesture = Gesture.Pan()
     .minPointers(currentTool === 'move' ? 1 : 2)
     .enableTrackpadTwoFingerGesture(true)
+    .enabled(currentTool === 'move' || scale.value > 1)
     .onStart(() => {
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     })
     .onUpdate((event) => {
-      // Allow panning when zoomed in or in explicit move mode
-      const allow = scale.value > 1 || currentTool === 'move';
-      if (allow) {
-        translateX.value = savedTranslateX.value + event.translationX;
-        translateY.value = savedTranslateY.value + event.translationY;
-      }
+      translateX.value = savedTranslateX.value + event.translationX;
+      translateY.value = savedTranslateY.value + event.translationY;
     })
     .onEnd(() => {
       // Constrain to prevent panning too far based on zoom level
-      const maxTranslate = 300 * (scale.value - 1);
+      const maxTranslate = 300 * Math.max(1, scale.value - 1);
+
       if (Math.abs(translateX.value) > maxTranslate) {
         translateX.value = withSpring(Math.sign(translateX.value) * maxTranslate);
       }
       if (Math.abs(translateY.value) > maxTranslate) {
         translateY.value = withSpring(Math.sign(translateY.value) * maxTranslate);
       }
+
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     });
 
-  // Combine gestures for simultaneous pinch and pan
-  const composedGesture = Gesture.Simultaneous(pinchGesture, panGesture);
+  // Combine gestures - when move tool is active, prioritize pan over canvas interaction
+  const composedGesture = currentTool === 'move'
+    ? Gesture.Race(panGesture, pinchGesture)
+    : Gesture.Simultaneous(pinchGesture, panGesture);
 
   // Animated style for canvas transform
   const animatedCanvasStyle = useAnimatedStyle(() => {
@@ -316,6 +329,14 @@ export default function FullscreenCanvas({
       ],
     };
   });
+
+  // Track scale changes for UI updates
+  useAnimatedReaction(
+    () => scale.value,
+    (currentValue) => {
+      runOnJS(setCurrentScale)(currentValue);
+    }
+  );
 
   // Sync external props with internal state when they change
   useEffect(() => {
@@ -557,7 +578,14 @@ export default function FullscreenCanvas({
               }}
             >
               <Feather name="move" size={20} color="#ffffff" />
-              <Text style={styles.toolButtonText}>Move</Text>
+              <View style={styles.toolButtonTextContainer}>
+                <Text style={styles.toolButtonText}>Move</Text>
+                {currentTool === 'move' && (
+                  <Text style={styles.toolButtonSubtext}>
+                    {currentScale > 1 ? `${currentScale.toFixed(1)}x` : 'Pan & Zoom'}
+                  </Text>
+                )}
+              </View>
             </TouchableOpacity>
 
             {/* Color Tool - Opens color picker */}
@@ -625,6 +653,14 @@ export default function FullscreenCanvas({
                 <Ionicons name="remove" size={24} color="#ffffff" />
               </TouchableOpacity>
 
+              {/* Reset Zoom */}
+              <TouchableOpacity
+                style={[styles.actionButton, currentScale > 1 && styles.actionButtonActive]}
+                onPress={handleResetZoom}
+              >
+                <MaterialIcons name="center-focus-strong" size={24} color="#ffffff" />
+              </TouchableOpacity>
+
               {/* Zoom In */}
               <TouchableOpacity
                 style={styles.actionButton}
@@ -676,7 +712,10 @@ export default function FullscreenCanvas({
 
             {/* Canvas Area */}
             <View
-              style={styles.canvasArea}
+              style={[
+                styles.canvasArea,
+                currentTool === 'move' && styles.canvasAreaMoveMode
+              ]}
               onLayout={(e) => {
                 const { width, height } = e.nativeEvent.layout;
                 if (width && height) setCanvasSize({ width, height });
@@ -714,6 +753,7 @@ export default function FullscreenCanvas({
                             templateUri={templateUri}
                             width={computeFit(canvasSize, templateSize).width}
                             height={computeFit(canvasSize, templateSize).height}
+                            style={{ pointerEvents: currentTool === 'move' ? 'none' : 'auto' }}
                           />
                         </View>
                       ) : (
@@ -736,6 +776,7 @@ export default function FullscreenCanvas({
                             height={computeFit(canvasSize, templateSize).height}
                             initialDataUrl={initialCanvasData}
                             interactionEnabled={currentTool !== 'move'}
+                            pointerEvents={currentTool === 'move' ? 'none' : 'auto'}
                           />
                         </View>
                       )}
@@ -900,10 +941,19 @@ const styles = StyleSheet.create({
     elevation: 8,
     transform: [{ scale: 1.05 }],
   },
+  toolButtonTextContainer: {
+    flex: 1,
+  },
   toolButtonText: {
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '600',
+  },
+  toolButtonSubtext: {
+    color: '#e0e7ff',
+    fontSize: 11,
+    fontWeight: '400',
+    marginTop: 2,
   },
   previewContainer: {
     marginTop: 16,
@@ -958,6 +1008,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  actionButtonActive: {
+    backgroundColor: '#4338ca',
+    borderWidth: 2,
+    borderColor: '#818cf8',
+  },
   saveActionButton: {
     backgroundColor: '#10b981',
   },
@@ -967,6 +1022,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 16,
     overflow: 'hidden',
+  },
+  canvasAreaMoveMode: {
+    backgroundColor: 'rgba(99, 102, 241, 0.05)',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(99, 102, 241, 0.2)',
+    borderStyle: 'dashed',
   },
   canvasWrapper: {
     alignItems: 'center',
