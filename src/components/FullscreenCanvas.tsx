@@ -264,60 +264,40 @@ export default function FullscreenCanvas({
     }
   }, [currentTool]);
 
-  // Pinch gesture for zooming
-  const pinchGesture = Gesture.Pinch()
-    .onStart(() => {
-      savedScale.value = scale.value;
-    })
-    .onUpdate((event) => {
-      const newScale = Math.max(1, Math.min(savedScale.value * event.scale, 4));
-      scale.value = newScale;
-    })
-    .onEnd(() => {
-      const clamped = Math.max(1, Math.min(4, scale.value));
-      scale.value = withSpring(clamped, { damping: 15, stiffness: 150 });
-      savedScale.value = clamped;
-
-      if (clamped === 1) {
-        translateX.value = withSpring(0, { damping: 15, stiffness: 150 });
-        translateY.value = withSpring(0, { damping: 15, stiffness: 150 });
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
-      }
-    });
-
   // Pan gesture for moving - enabled when move tool is selected OR when zoomed in
   const panGesture = Gesture.Pan()
-    .minPointers(currentTool === 'move' ? 1 : 2)
-    .enableTrackpadTwoFingerGesture(true)
+    .minPointers(1)
+    .maxPointers(1)
     .enabled(currentTool === 'move' || scale.value > 1)
+    .activateAfterLongPress(0) // Activate immediately
     .onStart(() => {
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     })
     .onUpdate((event) => {
-      translateX.value = savedTranslateX.value + event.translationX;
-      translateY.value = savedTranslateY.value + event.translationY;
+      // Only allow panning when move tool is active or when zoomed in
+      if (currentTool === 'move' || scale.value > 1) {
+        translateX.value = savedTranslateX.value + event.translationX;
+        translateY.value = savedTranslateY.value + event.translationY;
+      }
     })
     .onEnd(() => {
       // Constrain to prevent panning too far based on zoom level
-      const maxTranslate = 300 * Math.max(1, scale.value - 1);
+      const maxTranslate = scale.value > 1 ? 300 * (scale.value - 1) : 200;
 
       if (Math.abs(translateX.value) > maxTranslate) {
-        translateX.value = withSpring(Math.sign(translateX.value) * maxTranslate);
+        translateX.value = withSpring(Math.sign(translateX.value) * maxTranslate, { damping: 15, stiffness: 150 });
       }
       if (Math.abs(translateY.value) > maxTranslate) {
-        translateY.value = withSpring(Math.sign(translateY.value) * maxTranslate);
+        translateY.value = withSpring(Math.sign(translateY.value) * maxTranslate, { damping: 15, stiffness: 150 });
       }
 
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     });
 
-  // Combine gestures - when move tool is active, prioritize pan over canvas interaction
-  const composedGesture = currentTool === 'move'
-    ? Gesture.Race(panGesture, pinchGesture)
-    : Gesture.Simultaneous(pinchGesture, panGesture);
+  // Use only pan gesture - no pinch to zoom since we have dedicated buttons
+  const composedGesture = panGesture;
 
   // Animated style for canvas transform
   const animatedCanvasStyle = useAnimatedStyle(() => {
@@ -600,8 +580,8 @@ export default function FullscreenCanvas({
               <Text style={styles.toolButtonText}>Color</Text>
             </TouchableOpacity>
 
-            {/* Spacer */}
-            <View style={{ flex: 1 }} />
+            {/* Spacer - reduced to move previews up */}
+            <View style={{ flex: 0.3 }} />
 
             {/* Color Preview */}
             <View style={styles.previewContainer}>
@@ -629,8 +609,8 @@ export default function FullscreenCanvas({
                   style={[
                     styles.sizeCircle,
                     {
-                      width: Math.max(8, Math.min(28, currentBrushSize * 0.6)),
-                      height: Math.max(8, Math.min(28, currentBrushSize * 0.6)),
+                      width: Math.max(6, Math.min(20, currentBrushSize * 0.4)),
+                      height: Math.max(6, Math.min(20, currentBrushSize * 0.4)),
                     }
                   ]}
                 />
@@ -721,6 +701,15 @@ export default function FullscreenCanvas({
                 if (width && height) setCanvasSize({ width, height });
               }}
             >
+              {/* Move Mode Indicator */}
+              {currentTool === 'move' && (
+                <View style={styles.moveIndicator}>
+                  <Feather name="move" size={16} color="#6366f1" />
+                  <Text style={styles.moveIndicatorText}>
+                    {currentScale > 1 ? `Drag to pan (${currentScale.toFixed(1)}x)` : 'Drag to move canvas'}
+                  </Text>
+                </View>
+              )}
               {templateUri ? (
                 !templateSize ? (
                   <View style={styles.emptyCanvas}>
@@ -736,6 +725,7 @@ export default function FullscreenCanvas({
                         },
                         animatedCanvasStyle,
                       ]}
+                      pointerEvents={currentTool === 'move' ? 'auto' : 'box-none'}
                     >
                       {Platform.OS === 'web' ? (
                         <View
@@ -746,15 +736,22 @@ export default function FullscreenCanvas({
                             height: computeFit(canvasSize, templateSize).height,
                           }}
                         >
-                          <WorkingColoringCanvas
-                            selectedColor={currentColor}
-                            selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                            brushSize={currentBrushSize}
-                            templateUri={templateUri}
-                            width={computeFit(canvasSize, templateSize).width}
-                            height={computeFit(canvasSize, templateSize).height}
-                            style={{ pointerEvents: currentTool === 'move' ? 'none' : 'auto' }}
-                          />
+                          <View
+                            style={{
+                              width: computeFit(canvasSize, templateSize).width,
+                              height: computeFit(canvasSize, templateSize).height,
+                              pointerEvents: currentTool === 'move' ? 'none' : 'auto',
+                            }}
+                          >
+                            <WorkingColoringCanvas
+                              selectedColor={currentColor}
+                              selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                              brushSize={currentBrushSize}
+                              templateUri={templateUri}
+                              width={computeFit(canvasSize, templateSize).width}
+                              height={computeFit(canvasSize, templateSize).height}
+                            />
+                          </View>
                         </View>
                       ) : (
                         <View
@@ -765,19 +762,26 @@ export default function FullscreenCanvas({
                             height: computeFit(canvasSize, templateSize).height,
                           }}
                         >
-                          <NativeZebraCanvas
-                            ref={canvasRef}
-                            templateUri={templateUri}
-                            selectedColor={currentColor}
-                            selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                            brushWidth={currentBrushSize}
-                            onColoringComplete={onColoringComplete}
-                            width={computeFit(canvasSize, templateSize).width}
-                            height={computeFit(canvasSize, templateSize).height}
-                            initialDataUrl={initialCanvasData}
-                            interactionEnabled={currentTool !== 'move'}
-                            pointerEvents={currentTool === 'move' ? 'none' : 'auto'}
-                          />
+                          <View
+                            style={{
+                              width: computeFit(canvasSize, templateSize).width,
+                              height: computeFit(canvasSize, templateSize).height,
+                              pointerEvents: currentTool === 'move' ? 'none' : 'auto',
+                            }}
+                          >
+                            <NativeZebraCanvas
+                              ref={canvasRef}
+                              templateUri={templateUri}
+                              selectedColor={currentColor}
+                              selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                              brushWidth={currentBrushSize}
+                              onColoringComplete={onColoringComplete}
+                              width={computeFit(canvasSize, templateSize).width}
+                              height={computeFit(canvasSize, templateSize).height}
+                              initialDataUrl={initialCanvasData}
+                              interactionEnabled={currentTool !== 'move'}
+                            />
+                          </View>
                         </View>
                       )}
                     </Reanimated.View>
@@ -956,25 +960,25 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   previewContainer: {
-    marginTop: 16,
+    marginTop: 12,
   },
   previewLabel: {
     color: '#64748b',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   colorPreview: {
-    width: 120,
-    height: 36,
-    borderRadius: 10,
+    width: 100,
+    height: 28,
+    borderRadius: 8,
     borderWidth: 2,
     borderColor: '#e5e7eb',
   },
   sizePreview: {
-    width: 120,
-    height: 36,
-    borderRadius: 10,
+    width: 100,
+    height: 28,
+    borderRadius: 8,
     backgroundColor: '#f8fafc',
     borderWidth: 2,
     borderColor: '#e5e7eb',
@@ -1030,6 +1034,29 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(99, 102, 241, 0.2)',
     borderStyle: 'dashed',
   },
+  moveIndicator: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 10,
+  },
+  moveIndicatorText: {
+    fontSize: 12,
+    color: '#6366f1',
+    fontWeight: '500',
+  },
   canvasWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1064,7 +1091,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     margin: 20,
-    maxHeight: '85%',
+    maxHeight: '75%',
     minWidth: 320,
     maxWidth: '90%',
     shadowColor: '#000',
@@ -1072,6 +1099,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 16,
+    marginTop: 60, // Move it higher up
   },
   modalTitle: {
     fontSize: 18,
