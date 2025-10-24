@@ -256,6 +256,7 @@ export default function FullscreenCanvas({
 
   // Pinch-to-zoom gesture
   const pinchGesture = Gesture.Pinch()
+    .enabled(currentTool === 'move')
     .onUpdate((event) => {
       'worklet';
       scale.value = savedScale.value * event.scale;
@@ -331,7 +332,7 @@ export default function FullscreenCanvas({
   const twoFingerPanGesture = Gesture.Pan()
     .minPointers(2)
     .maxPointers(2)
-    .enabled(scale.value > 1)
+    .enabled(currentTool === 'move' && scale.value > 1)
     .onStart(() => {
       'worklet';
       savedTranslateX.value = translateX.value;
@@ -798,15 +799,7 @@ export default function FullscreenCanvas({
                 if (width && height) setCanvasSize({ width, height });
               }}
             >
-              {/* Move Mode Indicator */}
-              {currentTool === 'move' && (
-                <View style={styles.moveIndicator}>
-                  <Feather name="move" size={16} color="#6366f1" />
-                  <Text style={styles.moveIndicatorText}>
-                    Move Mode Active - Drag to navigate ({currentScale.toFixed(1)}x)
-                  </Text>
-                </View>
-              )}
+
               {templateUri ? (
                 !templateSize ? (
                   <View style={styles.emptyCanvas}>
@@ -1161,29 +1154,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(99, 102, 241, 0.2)',
     borderStyle: 'dashed',
-  },
-  moveIndicator: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    zIndex: 10,
-  },
-  moveIndicatorText: {
-    fontSize: 12,
-    color: '#6366f1',
-    fontWeight: '500',
   },
   canvasWrapper: {
     alignItems: 'center',
