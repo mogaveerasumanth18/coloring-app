@@ -254,43 +254,99 @@ export default function FullscreenCanvas({
 
   // Don't reset zoom when switching tools - let user control zoom independently
 
-  // Pan gesture for moving - EXACT SAME LOGIC as IntegratedColoringBookApp
+  // Revamped pan gesture for proper move functionality
   const panGesture = Gesture.Pan()
-    .minPointers(currentTool === 'move' ? 1 : 2)
+    .minPointers(1)
+    .maxPointers(1)
+    .shouldCancelWhenOutside(false)
+    .enabled(currentTool === 'move')
     .onStart(() => {
+      'worklet';
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     })
     .onUpdate((event) => {
-      // Only allow panning when zoomed in or in explicit move mode - EXACT SAME CONDITION
-      const allow = scale.value > 1 || currentTool === 'move';
-      if (allow) {
+      'worklet';
+      if (currentTool === 'move') {
         translateX.value = savedTranslateX.value + event.translationX;
         translateY.value = savedTranslateY.value + event.translationY;
       }
     })
     .onEnd(() => {
-      // Add boundaries to prevent panning too far - SAME AS MAIN APP
-      const scaledW = (screenWidth - 32) * scale.value;
-      const scaledH = (screenWidth - 32) * 0.8 * scale.value;
-      const containerW = screenWidth - 32;
-      const containerH = (screenWidth - 32) * 0.8;
-      const maxX = Math.max(0, (scaledW - containerW) / 2);
-      const maxY = Math.max(0, (scaledH - containerH) / 2);
+      'worklet';
+      // Calculate proper boundaries based on actual canvas size and zoom
+      const canvasWidth = canvasSize.width - 32; // Account for padding
+      const canvasHeight = canvasSize.height - 100; // Account for UI elements
+
+      const scaledWidth = canvasWidth * scale.value;
+      const scaledHeight = canvasHeight * scale.value;
+
+      // Only constrain if zoomed in (scale > 1)
+      if (scale.value > 1) {
+        const maxTranslateX = (scaledWidth - canvasWidth) / 2;
+        const maxTranslateY = (scaledHeight - canvasHeight) / 2;
+
+        translateX.value = withSpring(
+          Math.max(-maxTranslateX, Math.min(maxTranslateX, translateX.value)),
+          { damping: 20, stiffness: 200 }
+        );
+        translateY.value = withSpring(
+          Math.max(-maxTranslateY, Math.min(maxTranslateY, translateY.value)),
+          { damping: 20, stiffness: 200 }
+        );
+      } else {
+        // Reset to center when not zoomed
+        translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
+        translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
+      }
+
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
+
+  // Additional pan gesture for two-finger panning when zoomed (regardless of tool)
+  const twoFingerPanGesture = Gesture.Pan()
+    .minPointers(2)
+    .maxPointers(2)
+    .enabled(scale.value > 1)
+    .onStart(() => {
+      'worklet';
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    })
+    .onUpdate((event) => {
+      'worklet';
+      if (scale.value > 1) {
+        translateX.value = savedTranslateX.value + event.translationX;
+        translateY.value = savedTranslateY.value + event.translationY;
+      }
+    })
+    .onEnd(() => {
+      'worklet';
+      const canvasWidth = canvasSize.width - 32;
+      const canvasHeight = canvasSize.height - 100;
+
+      const scaledWidth = canvasWidth * scale.value;
+      const scaledHeight = canvasHeight * scale.value;
+
+      const maxTranslateX = (scaledWidth - canvasWidth) / 2;
+      const maxTranslateY = (scaledHeight - canvasHeight) / 2;
 
       translateX.value = withSpring(
-        Math.max(-maxX, Math.min(maxX, translateX.value))
+        Math.max(-maxTranslateX, Math.min(maxTranslateX, translateX.value)),
+        { damping: 20, stiffness: 200 }
       );
       translateY.value = withSpring(
-        Math.max(-maxY, Math.min(maxY, translateY.value))
+        Math.max(-maxTranslateY, Math.min(maxTranslateY, translateY.value)),
+        { damping: 20, stiffness: 200 }
       );
 
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     });
 
-  // Use only pan gesture - no pinch to zoom since we have dedicated buttons
-  const composedGesture = panGesture;
+  // Combine both pan gestures - move tool (1 finger) and zoom pan (2 fingers)
+  const composedGesture = Gesture.Race(panGesture, twoFingerPanGesture);
 
   // Animated style for canvas transform
   const animatedCanvasStyle = useAnimatedStyle(() => {
@@ -573,41 +629,44 @@ export default function FullscreenCanvas({
               <Text style={styles.toolButtonText}>Color</Text>
             </TouchableOpacity>
 
-            {/* Spacer - reduced to move previews up */}
-            <View style={{ flex: 0.1 }} />
+            {/* Spacer - minimal to fit previews */}
+            <View style={{ flex: 0.05 }} />
 
-            {/* Color Preview */}
-            <View style={styles.previewContainer}>
-              <Text style={styles.previewLabel}>Color:</Text>
-              <TouchableOpacity
-                style={[styles.colorPreview, { backgroundColor: currentColor }]}
-                onPress={() => {
-                  console.log('Color preview tapped, opening picker');
-                  setShowColorPicker(true);
-                }}
-              />
-            </View>
-
-            {/* Size Preview */}
-            <View style={styles.previewContainer}>
-              <Text style={styles.previewLabel}>Size:</Text>
-              <TouchableOpacity
-                style={styles.sizePreview}
-                onPress={() => {
-                  console.log('Size preview tapped, opening picker');
-                  setShowSizePicker(true);
-                }}
-              >
-                <View
-                  style={[
-                    styles.sizeCircle,
-                    {
-                      width: Math.max(6, Math.min(20, currentBrushSize * 0.4)),
-                      height: Math.max(6, Math.min(20, currentBrushSize * 0.4)),
-                    }
-                  ]}
+            {/* Compact Preview Section */}
+            <View style={styles.compactPreviewSection}>
+              {/* Color Preview */}
+              <View style={styles.compactPreviewContainer}>
+                <Text style={styles.compactPreviewLabel}>Color:</Text>
+                <TouchableOpacity
+                  style={[styles.compactColorPreview, { backgroundColor: currentColor }]}
+                  onPress={() => {
+                    console.log('Color preview tapped, opening picker');
+                    setShowColorPicker(true);
+                  }}
                 />
-              </TouchableOpacity>
+              </View>
+
+              {/* Size Preview */}
+              <View style={styles.compactPreviewContainer}>
+                <Text style={styles.compactPreviewLabel}>Size:</Text>
+                <TouchableOpacity
+                  style={styles.compactSizePreview}
+                  onPress={() => {
+                    console.log('Size preview tapped, opening picker');
+                    setShowSizePicker(true);
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.compactSizeCircle,
+                      {
+                        width: Math.max(4, Math.min(16, currentBrushSize * 0.3)),
+                        height: Math.max(4, Math.min(16, currentBrushSize * 0.3)),
+                      }
+                    ]}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
@@ -699,7 +758,7 @@ export default function FullscreenCanvas({
                 <View style={styles.moveIndicator}>
                   <Feather name="move" size={16} color="#6366f1" />
                   <Text style={styles.moveIndicatorText}>
-                    {currentScale > 1 ? `Drag to navigate (${currentScale.toFixed(1)}x)` : 'Drag to move canvas'}
+                    Move Mode Active - Drag to navigate ({currentScale.toFixed(1)}x)
                   </Text>
                 </View>
               )}
@@ -718,7 +777,7 @@ export default function FullscreenCanvas({
                         },
                         animatedCanvasStyle,
                       ]}
-                      pointerEvents={currentTool === 'move' ? 'auto' : 'box-none'}
+                      pointerEvents="auto"
                     >
                       {Platform.OS === 'web' ? (
                         <View
@@ -729,22 +788,19 @@ export default function FullscreenCanvas({
                             height: computeFit(canvasSize, templateSize).height,
                           }}
                         >
-                          <View
+                          <WorkingColoringCanvas
+                            selectedColor={currentColor}
+                            selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                            brushSize={currentBrushSize}
+                            templateUri={templateUri}
+                            width={computeFit(canvasSize, templateSize).width}
+                            height={computeFit(canvasSize, templateSize).height}
                             style={{
-                              width: computeFit(canvasSize, templateSize).width,
-                              height: computeFit(canvasSize, templateSize).height,
                               pointerEvents: currentTool === 'move' ? 'none' : 'auto',
+                              width: '100%',
+                              height: '100%'
                             }}
-                          >
-                            <WorkingColoringCanvas
-                              selectedColor={currentColor}
-                              selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                              brushSize={currentBrushSize}
-                              templateUri={templateUri}
-                              width={computeFit(canvasSize, templateSize).width}
-                              height={computeFit(canvasSize, templateSize).height}
-                            />
-                          </View>
+                          />
                         </View>
                       ) : (
                         <View
@@ -755,26 +811,23 @@ export default function FullscreenCanvas({
                             height: computeFit(canvasSize, templateSize).height,
                           }}
                         >
-                          <View
+                          <NativeZebraCanvas
+                            ref={canvasRef}
+                            templateUri={templateUri}
+                            selectedColor={currentColor}
+                            selectedTool={currentTool === 'move' ? 'brush' : currentTool}
+                            brushWidth={currentBrushSize}
+                            onColoringComplete={onColoringComplete}
+                            width={computeFit(canvasSize, templateSize).width}
+                            height={computeFit(canvasSize, templateSize).height}
+                            initialDataUrl={initialCanvasData}
+                            interactionEnabled={currentTool !== 'move'}
                             style={{
-                              width: computeFit(canvasSize, templateSize).width,
-                              height: computeFit(canvasSize, templateSize).height,
                               pointerEvents: currentTool === 'move' ? 'none' : 'auto',
+                              width: '100%',
+                              height: '100%'
                             }}
-                          >
-                            <NativeZebraCanvas
-                              ref={canvasRef}
-                              templateUri={templateUri}
-                              selectedColor={currentColor}
-                              selectedTool={currentTool === 'move' ? 'brush' : currentTool}
-                              brushWidth={currentBrushSize}
-                              onColoringComplete={onColoringComplete}
-                              width={computeFit(canvasSize, templateSize).width}
-                              height={computeFit(canvasSize, templateSize).height}
-                              initialDataUrl={initialCanvasData}
-                              interactionEnabled={currentTool !== 'move'}
-                            />
-                          </View>
+                          />
                         </View>
                       )}
                     </Reanimated.View>
@@ -979,6 +1032,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sizeCircle: {
+    backgroundColor: '#6366f1',
+    borderRadius: 100,
+  },
+  // Compact preview styles for better fit
+  compactPreviewSection: {
+    gap: 6,
+  },
+  compactPreviewContainer: {
+    marginTop: 6,
+  },
+  compactPreviewLabel: {
+    color: '#64748b',
+    fontSize: 10,
+    fontWeight: '500',
+    marginBottom: 3,
+  },
+  compactColorPreview: {
+    width: 90,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+  },
+  compactSizePreview: {
+    width: 90,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: '#f8fafc',
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compactSizeCircle: {
     backgroundColor: '#6366f1',
     borderRadius: 100,
   },
