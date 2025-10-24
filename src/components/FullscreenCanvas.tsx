@@ -584,7 +584,8 @@ export default function FullscreenCanvas({
       supportedOrientations={["landscape", "landscape-left", "landscape-right"]}
       statusBarTranslucent
     >
-      <View style={styles.fullscreenContainer}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={styles.fullscreenContainer}>
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
 
           {/* Left Sidebar - Tool Palette */}
@@ -992,7 +993,8 @@ export default function FullscreenCanvas({
             </View>
           </View>
         </Modal>
-      </View>
+        </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
