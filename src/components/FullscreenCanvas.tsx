@@ -223,6 +223,8 @@ export default function FullscreenCanvas({
   const savedScale = useSharedValue(1);
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
+  const canvasWidthSV = useSharedValue(0);
+  const canvasHeightSV = useSharedValue(0);
 
   // Zoom functions
   const handleZoomIn = () => {
@@ -299,8 +301,8 @@ export default function FullscreenCanvas({
     .onEnd(() => {
       'worklet';
       // Calculate proper boundaries based on actual canvas size and zoom
-      const canvasWidth = canvasSize.width - 32; // Account for padding
-      const canvasHeight = canvasSize.height - 100; // Account for UI elements
+      const canvasWidth = canvasWidthSV.value - 32; // Account for padding
+      const canvasHeight = canvasHeightSV.value - 100; // Account for UI elements
 
       const scaledWidth = canvasWidth * scale.value;
       const scaledHeight = canvasHeight * scale.value;
@@ -347,8 +349,8 @@ export default function FullscreenCanvas({
     })
     .onEnd(() => {
       'worklet';
-      const canvasWidth = canvasSize.width - 32;
-      const canvasHeight = canvasSize.height - 100;
+      const canvasWidth = canvasWidthSV.value - 32;
+      const canvasHeight = canvasHeightSV.value - 100;
 
       const scaledWidth = canvasWidth * scale.value;
       const scaledHeight = canvasHeight * scale.value;
@@ -796,7 +798,11 @@ export default function FullscreenCanvas({
               ]}
               onLayout={(e) => {
                 const { width, height } = e.nativeEvent.layout;
-                if (width && height) setCanvasSize({ width, height });
+                if (width && height) {
+                  setCanvasSize({ width, height });
+                  canvasWidthSV.value = width;
+                  canvasHeightSV.value = height;
+                }
               }}
             >
 
