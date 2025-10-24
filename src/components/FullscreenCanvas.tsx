@@ -254,6 +254,29 @@ export default function FullscreenCanvas({
 
   // Don't reset zoom when switching tools - let user control zoom independently
 
+  // Pinch-to-zoom gesture
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((event) => {
+      'worklet';
+      scale.value = savedScale.value * event.scale;
+    })
+    .onEnd(() => {
+      'worklet';
+      if (scale.value < 1) {
+        scale.value = withSpring(1);
+      } else if (scale.value > 4) {
+        scale.value = withSpring(4);
+      }
+      savedScale.value = scale.value;
+
+      if (scale.value <= 1) {
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      }
+    });
+
   // Revamped pan gesture for proper move functionality
   const panGesture = Gesture.Pan()
     .minPointers(1)
@@ -345,8 +368,11 @@ export default function FullscreenCanvas({
       savedTranslateY.value = translateY.value;
     });
 
-  // Combine both pan gestures - move tool (1 finger) and zoom pan (2 fingers)
-  const composedGesture = Gesture.Race(panGesture, twoFingerPanGesture);
+  // Combine gestures: pinch, one-finger pan (move tool), and two-finger pan (zoom)
+  const composedGesture = Gesture.Simultaneous(
+    pinchGesture,
+    Gesture.Race(panGesture, twoFingerPanGesture)
+  );
 
   // Animated style for canvas transform
   const animatedCanvasStyle = useAnimatedStyle(() => {
@@ -501,8 +527,21 @@ export default function FullscreenCanvas({
   };
 
   const handleClear = () => {
-    // Native canvas exposes clear(); web may no-op if ref is not present
-    canvasRef.current?.clear?.();
+    Alert.alert(
+      'Clear Canvas',
+      'Are you sure you want to erase everything? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            // Native canvas exposes clear(); web may no-op if ref is not present
+            canvasRef.current?.clear?.();
+          },
+        },
+      ]
+    );
   };
 
   // Use a full-screen Modal so the overlay truly covers the entire screen
@@ -717,6 +756,11 @@ export default function FullscreenCanvas({
                 <Ionicons name="arrow-redo" size={24} color="#ffffff" />
               </TouchableOpacity>
 
+              {/* Clear Canvas */}
+              <TouchableOpacity style={styles.actionButton} onPress={handleClear}>
+                <Ionicons name="trash-outline" size={24} color="#ffffff" />
+              </TouchableOpacity>
+
               {/* Fullscreen Exit */}
               <TouchableOpacity
                 style={styles.actionButton}
@@ -912,37 +956,39 @@ export default function FullscreenCanvas({
               style={StyleSheet.absoluteFill}
               onPress={() => setShowSizePicker(false)}
             />
-            <View style={styles.sizePickerModal}>
-              <Text style={styles.modalTitle}>Brush Size</Text>
-              <View style={styles.sizePreviewLarge}>
-                <View
-                  style={[
-                    styles.sizeCircleLarge,
-                    {
-                      width: Math.max(10, Math.min(100, currentBrushSize * 2)),
-                      height: Math.max(10, Math.min(100, currentBrushSize * 2)),
-                      backgroundColor: currentColor,
-                    }
-                  ]}
+            <View onStartShouldSetResponder={() => true}>
+              <View style={styles.sizePickerModal}>
+                <Text style={styles.modalTitle}>Brush Size</Text>
+                <View style={styles.sizePreviewLarge}>
+                  <View
+                    style={[
+                      styles.sizeCircleLarge,
+                      {
+                        width: Math.max(10, Math.min(100, currentBrushSize * 2)),
+                        height: Math.max(10, Math.min(100, currentBrushSize * 2)),
+                        backgroundColor: currentColor,
+                      }
+                    ]}
+                  />
+                </View>
+                <Text style={styles.sizeValueText}>{Math.round(currentBrushSize)}px</Text>
+                <Slider
+                  style={styles.sizeSlider}
+                  value={currentBrushSize}
+                  onValueChange={setCurrentBrushSize}
+                  minimumValue={2}
+                  maximumValue={50}
+                  step={1}
+                  minimumTrackTintColor="#6366f1"
+                  maximumTrackTintColor="#e5e7eb"
                 />
+                <TouchableOpacity
+                  style={styles.modalCloseButton}
+                  onPress={() => setShowSizePicker(false)}
+                >
+                  <Text style={styles.modalCloseButtonText}>Done</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.sizeValueText}>{Math.round(currentBrushSize)}px</Text>
-              <Slider
-                style={styles.sizeSlider}
-                value={currentBrushSize}
-                onValueChange={setCurrentBrushSize}
-                minimumValue={2}
-                maximumValue={50}
-                step={1}
-                minimumTrackTintColor="#6366f1"
-                maximumTrackTintColor="#e5e7eb"
-              />
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setShowSizePicker(false)}
-              >
-                <Text style={styles.modalCloseButtonText}>Done</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </Modal>
