@@ -674,9 +674,6 @@ export default function FullscreenCanvas({
                 <Text style={styles.toolButtonText}>Color</Text>
               </TouchableOpacity>
 
-              {/* Spacer - minimal to fit previews */}
-              <View style={{ flex: 0.05 }} />
-
               {/* Compact Preview Section */}
               <View style={styles.compactPreviewSection}>
                 {/* Color Preview */}
@@ -974,8 +971,9 @@ export default function FullscreenCanvas({
                     }}
                     minimumTrackTintColor="#6366f1"
                     maximumTrackTintColor="#e5e7eb"
-                    thumbStyle={{ backgroundColor: '#6366f1', width: 24, height: 24 }}
-                  />                  <TouchableOpacity
+                    thumbTintColor="#6366f1"
+                  />
+                  <TouchableOpacity
                     style={styles.modalCloseButton}
                     onPress={() => setShowSizePicker(false)}
                   >
@@ -1077,10 +1075,11 @@ const styles = StyleSheet.create({
   },
   // Compact preview styles for better fit
   compactPreviewSection: {
-    gap: 6,
+    gap: 2,
+    marginTop: 8,
   },
   compactPreviewContainer: {
-    marginTop: 6,
+    marginTop: 2,
   },
   compactPreviewLabel: {
     color: '#64748b',
