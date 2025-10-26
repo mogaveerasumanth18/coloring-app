@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  AppState,
   Dimensions,
   Platform,
   ScrollView,
@@ -37,6 +38,7 @@ import { WorkingColoringCanvas } from './WorkingColoringCanvas';
 import { NativeZebraCanvas } from './NativeZebraCanvas';
 import FullscreenCanvas from './FullscreenCanvas';
 import ColorPicker from 'react-native-wheel-color-picker';
+import { TouchSlider } from './TouchSlider';
 
 const { width: screenWidth } = Dimensions.get('window');
 // UI sizing constants for responsive palette/slider
@@ -100,67 +102,7 @@ const CustomColorPicker = ({
   );
 };
 
-// Small custom slider for Android to avoid gesture conflicts with the native Slider
-function SizeSliderNative({
-  value,
-  onChange,
-  min = 5,
-  max = 100,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  min?: number;
-  max?: number;
-}) {
-  const [trackW, setTrackW] = React.useState(0);
-  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-  const valToX = (v: number) => {
-    if (trackW <= 0) return 0;
-    const p = (v - min) / (max - min);
-    return clamp(p, 0, 1) * trackW;
-  };
-  const xToVal = (x: number) => {
-    if (trackW <= 0) return min;
-    const p = clamp(x / trackW, 0, 1);
-    return Math.round(min + p * (max - min));
-  };
-
-  const sliderPanGesture = Gesture.Pan()
-    .onUpdate((event) => {
-      try {
-        const x = event.x ?? 0; // absolute inside the track
-        onChange(xToVal(x));
-      } catch (error) {
-        console.warn('SizeSliderNative onUpdate error:', error);
-      }
-    })
-    .onEnd((event) => {
-      try {
-        if (event.x != null) {
-          onChange(xToVal(event.x));
-        }
-      } catch (error) {
-        console.warn('SizeSliderNative onEnd error:', error);
-      }
-    })
-    .shouldCancelWhenOutside(true)
-    .minDistance(0);
-
-  const thumbX = valToX(value);
-  const THUMB = 28;
-
-  return (
-    <GestureDetector gesture={sliderPanGesture}>
-      <View style={styles.customSliderWrap}>
-        <View style={styles.customSliderTrack} onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}>
-          <View style={[styles.customSliderFill, { width: thumbX }]} />
-          <View style={[styles.customSliderThumb, { left: Math.max(0, thumbX - THUMB / 2), width: THUMB, height: THUMB }]} />
-        </View>
-      </View>
-    </GestureDetector>
-  );
-}
 
 export default function IntegratedColoringBookApp({
   compact = false,
@@ -181,6 +123,8 @@ export default function IntegratedColoringBookApp({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showColorTray, setShowColorTray] = useState(false);
   const [showZoomUi, setShowZoomUi] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [currentOrientation, setCurrentOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const webSliderTrackRef = useRef<View>(null);
   const [webSliderTrackWidth, setWebSliderTrackWidth] = useState(0);
   const bitmapCanvasRef = useRef<any>(null);
@@ -239,6 +183,99 @@ export default function IntegratedColoringBookApp({
       }
     };
     loadDefaultTemplate();
+  }, []);
+
+  // Handle app state changes and orientation synchronization
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    const handleAppStateChange = async (nextAppState: string) => {
+      console.log('App state changed to:', nextAppState);
+
+      if (nextAppState === 'active') {
+        // App came back to foreground - check current orientation
+        try {
+          const orientation = await ScreenOrientation.getOrientationAsync();
+          const isLandscape = orientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+            orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+
+          console.log('App resumed - current orientation:', orientation, 'isLandscape:', isLandscape, 'isFullscreen:', isFullscreen);
+
+          // Sync state with actual orientation
+          if (isLandscape && !isFullscreen) {
+            console.log('App resumed in landscape - entering fullscreen mode');
+            setIsFullscreen(true);
+            setCurrentOrientation('landscape');
+          } else if (!isLandscape && isFullscreen) {
+            console.log('App resumed in portrait - exiting fullscreen mode');
+            setIsFullscreen(false);
+            setCurrentOrientation('portrait');
+          }
+        } catch (error) {
+          console.error('Failed to get orientation on app resume:', error);
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    // Also check initial orientation
+    const checkInitialOrientation = async () => {
+      try {
+        const orientation = await ScreenOrientation.getOrientationAsync();
+        const isLandscape = orientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+          orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+        setCurrentOrientation(isLandscape ? 'landscape' : 'portrait');
+      } catch (error) {
+        console.error('Failed to get initial orientation:', error);
+      }
+    };
+
+    checkInitialOrientation();
+
+    return () => {
+      subscription?.remove();
+    };
+  }, [isFullscreen]);
+
+  // Listen for orientation changes
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    const subscription = ScreenOrientation.addOrientationChangeListener((event) => {
+      const { orientationInfo } = event;
+      const isLandscape = orientationInfo.orientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+        orientationInfo.orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+
+      console.log('Orientation changed:', orientationInfo.orientation, 'isLandscape:', isLandscape);
+
+      setCurrentOrientation(isLandscape ? 'landscape' : 'portrait');
+
+      // Sync fullscreen state with orientation if not transitioning
+      if (!isTransitioning) {
+        if (isLandscape && !isFullscreen) {
+          console.log('Orientation changed to landscape - entering fullscreen');
+          setIsFullscreen(true);
+        } else if (!isLandscape && isFullscreen) {
+          console.log('Orientation changed to portrait - exiting fullscreen');
+          setIsFullscreen(false);
+        }
+      }
+    });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, [isFullscreen, isTransitioning]);
+
+  // Cleanup effect to ensure proper state on unmount
+  useEffect(() => {
+    return () => {
+      if (Platform.OS !== 'web') {
+        // Reset to portrait on component unmount
+        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(console.error);
+      }
+    };
   }, []);
 
   // Pinch gesture for zooming (web only to avoid Android lag)
@@ -407,6 +444,8 @@ export default function IntegratedColoringBookApp({
   };
 
   const handleExpandFullscreen = async () => {
+    if (isTransitioning) return; // Prevent multiple rapid transitions
+
     // First, try to capture current canvas state if available
     let currentCanvasData: string | null = null;
 
@@ -426,7 +465,7 @@ export default function IntegratedColoringBookApp({
     // If we have existing progress, check if it's different from original template
     const hasProgress = dataToUse && dataToUse !== currentTemplate?.bitmapUri && dataToUse.length > 100; // Basic check for actual data
 
-    if (hasProgress) {
+    if (hasProgress && !isFullscreen) {
       Alert.alert(
         'Switch to Fullscreen',
         'Your current progress will be preserved when switching to fullscreen mode. Continue?',
@@ -449,27 +488,91 @@ export default function IntegratedColoringBookApp({
   };
 
   const proceedToFullscreen = async (canvasData: string | null) => {
-    // Update the canvas data to pass to fullscreen
-    setCanvasSnapshot(canvasData);
+    if (isTransitioning) return;
 
-    if (Platform.OS === 'web') {
-      toggleFullscreenWeb();
-    } else {
-      // For React Native (mobile devices)
-      try {
+    setIsTransitioning(true);
+
+    try {
+      // Update the canvas data to pass to fullscreen
+      setCanvasSnapshot(canvasData);
+
+      if (Platform.OS === 'web') {
+        toggleFullscreenWeb();
+        setIsTransitioning(false);
+      } else {
+        // For React Native (mobile devices)
         if (!isFullscreen) {
           // Enter fullscreen mode - switch to landscape
-          await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-          setIsFullscreen(true);
+          console.log('Entering fullscreen mode...');
+          setIsFullscreen(true); // Set state first for smooth transition
+
+          // Small delay to allow UI to update before orientation change
+          setTimeout(async () => {
+            try {
+              await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+              console.log('Successfully locked to landscape');
+            } catch (error) {
+              console.error('Failed to lock landscape orientation:', error);
+              // Revert state if orientation lock failed
+              setIsFullscreen(false);
+              Alert.alert('Orientation Error', 'Failed to change screen orientation');
+            }
+            setIsTransitioning(false);
+          }, 100);
         } else {
           // Exit fullscreen mode - switch back to portrait
-          await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-          setIsFullscreen(false);
+          console.log('Exiting fullscreen mode...');
+          setIsFullscreen(false); // Set state first for smooth transition
+
+          // Small delay to allow UI to update before orientation change
+          setTimeout(async () => {
+            try {
+              await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+              console.log('Successfully locked to portrait');
+            } catch (error) {
+              console.error('Failed to lock portrait orientation:', error);
+              // Revert state if orientation lock failed
+              setIsFullscreen(true);
+              Alert.alert('Orientation Error', 'Failed to change screen orientation');
+            }
+            setIsTransitioning(false);
+          }, 100);
         }
-      } catch (error) {
-        console.error('Failed to toggle orientation:', error);
-        Alert.alert('Orientation Error', 'Failed to change screen orientation');
       }
+    } catch (error) {
+      console.error('Error in proceedToFullscreen:', error);
+      setIsTransitioning(false);
+    }
+  };
+
+  // Handle fullscreen exit from the fullscreen component
+  const handleFullscreenClose = async () => {
+    if (isTransitioning) return;
+
+    setIsTransitioning(true);
+
+    try {
+      if (Platform.OS === 'web') {
+        setIsFullscreen(false);
+        setIsTransitioning(false);
+      } else {
+        // Set state first for smooth transition
+        setIsFullscreen(false);
+
+        // Small delay before orientation change
+        setTimeout(async () => {
+          try {
+            await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+            console.log('Successfully returned to portrait from fullscreen');
+          } catch (error) {
+            console.error('Failed to return to portrait:', error);
+          }
+          setIsTransitioning(false);
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Error closing fullscreen:', error);
+      setIsTransitioning(false);
     }
   };
 
@@ -638,30 +741,20 @@ export default function IntegratedColoringBookApp({
                 <Feather name="minus" size={16} color="#4F46E5" />
               </TouchableOpacity>
 
-              {/* Draggable slider */}
-              {Platform.OS === 'android' ? (
-                <SizeSliderNative
+              {/* Enhanced touch slider for all platforms */}
+              <View style={{ flex: 1 }}>
+                <TouchSlider
                   value={brushSize}
                   onChange={(v) => setBrushSize(v)}
                   min={5}
                   max={100}
+                  step={1}
+                  fillColor="#6366f1"
+                  trackColor="#E2E8F0"
+                  thumbColor="#ffffff"
+                  thumbBorderColor="#4f46e5"
                 />
-              ) : (
-                <View style={{ flex: 1 }}>
-                  <Slider
-                    style={styles.sizeSlider}
-                    minimumValue={5}
-                    maximumValue={100}
-                    value={brushSize}
-                    step={1}
-                    onValueChange={(v: number) => setBrushSize(Math.round(v))}
-                    onSlidingComplete={(v: number) => setBrushSize(Math.round(v))}
-                    minimumTrackTintColor="#6366f1"
-                    maximumTrackTintColor="#E2E8F0"
-                    thumbTintColor="#6366f1"
-                  />
-                </View>
-              )}
+              </View>
 
               {/* Increase size button */}
               <TouchableOpacity
@@ -705,7 +798,11 @@ export default function IntegratedColoringBookApp({
           >
             <Feather name="move" size={20} color="#FFFFFF" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.modernActionButton} onPress={handleExpandFullscreen}>
+          <TouchableOpacity
+            style={[styles.modernActionButton, isTransitioning && styles.modernActionButtonDisabled]}
+            onPress={handleExpandFullscreen}
+            disabled={isTransitioning}
+          >
             <Feather name={isFullscreen ? "minimize-2" : "maximize-2"} size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
@@ -786,10 +883,21 @@ export default function IntegratedColoringBookApp({
       {activeTab === 'color' && renderColorTab()}
       {activeTab === 'templates' && renderTemplatesTab()}
 
+      {/* Transition overlay */}
+      {isTransitioning && (
+        <View style={styles.transitionOverlay}>
+          <View style={styles.transitionIndicator}>
+            <Text style={styles.transitionText}>
+              {isFullscreen ? 'Entering Fullscreen...' : 'Exiting Fullscreen...'}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Fullscreen Canvas Overlay */}
       <FullscreenCanvas
         isVisible={isFullscreen}
-        onClose={() => setIsFullscreen(false)}
+        onClose={handleFullscreenClose}
         templateUri={currentTemplate?.bitmapUri}
         selectedColor={selectedColor}
         selectedTool={selectedTool as 'brush' | 'bucket' | 'eraser' | 'move'}
@@ -1116,6 +1224,31 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 3,
+  },
+  modernActionButtonDisabled: {
+    opacity: 0.5,
+  },
+  transitionOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  transitionIndicator: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+  },
+  transitionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
   },
   colorsScrollView: {
     marginBottom: 16,
@@ -2047,38 +2180,5 @@ const styles = StyleSheet.create({
     height: 30
   },
 
-  // Custom Android slider
-  customSliderWrap: {
-    flex: 1,
-    paddingHorizontal: 4,
-  },
-  customSliderTrack: {
-    width: '100%',
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: '#E2E8F0',
-    justifyContent: 'center',
-  },
-  customSliderFill: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: '#6366f1',
-    borderTopLeftRadius: 999,
-    borderBottomLeftRadius: 999,
-  },
-  customSliderThumb: {
-    position: 'absolute',
-    top: -10,
-    borderRadius: 999,
-    backgroundColor: '#ffffff',
-    borderWidth: 3,
-    borderColor: '#4f46e5',
-    shadowColor: '#4f46e5',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 2,
-  }
+
 });

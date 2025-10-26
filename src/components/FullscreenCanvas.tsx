@@ -26,6 +26,7 @@ import { ZebraColoringCanvas } from './ZebraColoringCanvas';
 import { NativeZebraCanvas } from './NativeZebraCanvas';
 import Slider from '@react-native-community/slider';
 import ColorPicker from 'react-native-wheel-color-picker';
+import { TouchSlider } from './TouchSlider';
 import { GestureHandlerRootView, PinchGestureHandler, PanGestureHandler, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { useSharedValue, useAnimatedGestureHandler, runOnJS, useAnimatedStyle, withSpring, useAnimatedReaction } from 'react-native-reanimated';
 import Reanimated from 'react-native-reanimated';
@@ -424,20 +425,24 @@ export default function FullscreenCanvas({
 
   // Handle visibility state changes with transition management
   useEffect(() => {
-    if (isTransitioning) return;
-
-    if (isVisible && !internalVisible) {
-      // Entering fullscreen
-      setIsTransitioning(true);
-      setInternalVisible(true);
-      setTimeout(() => setIsTransitioning(false), 100);
-    } else if (!isVisible && internalVisible) {
-      // Exiting fullscreen
-      setIsTransitioning(true);
-      setInternalVisible(false);
-      setTimeout(() => setIsTransitioning(false), 300);
+    if (isVisible !== internalVisible) {
+      if (isVisible) {
+        // Entering fullscreen
+        setIsTransitioning(true);
+        setInternalVisible(true);
+        // Allow time for modal to appear
+        setTimeout(() => setIsTransitioning(false), 200);
+      } else {
+        // Exiting fullscreen
+        setIsTransitioning(true);
+        // Small delay before hiding to allow smooth transition
+        setTimeout(() => {
+          setInternalVisible(false);
+          setIsTransitioning(false);
+        }, 100);
+      }
     }
-  }, [isVisible, internalVisible, isTransitioning]);
+  }, [isVisible, internalVisible]);
 
   // Function to handle tool interactions (no auto-hide functionality)
   const handleToolInteraction = () => {
@@ -453,7 +458,7 @@ export default function FullscreenCanvas({
   }, [currentBrushSize]);
 
   useEffect(() => {
-    // Remove orientation locking from child component - parent handles this
+    // Handle status bar visibility
     if (isVisible && Platform.OS !== 'web') {
       StatusBar.setHidden(true);
     }
@@ -462,6 +467,27 @@ export default function FullscreenCanvas({
       if (Platform.OS !== 'web') {
         StatusBar.setHidden(false);
       }
+    };
+  }, [isVisible]);
+
+  // Handle orientation changes within fullscreen
+  useEffect(() => {
+    if (Platform.OS === 'web' || !isVisible) return;
+
+    const subscription = ScreenOrientation.addOrientationChangeListener((event) => {
+      const { orientationInfo } = event;
+      const isLandscape = orientationInfo.orientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+        orientationInfo.orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+
+      // If orientation changed to portrait while in fullscreen, close fullscreen
+      if (!isLandscape && isVisible) {
+        console.log('Orientation changed to portrait in fullscreen - closing');
+        handleClose();
+      }
+    });
+
+    return () => {
+      subscription?.remove();
     };
   }, [isVisible]);
 
@@ -486,13 +512,9 @@ export default function FullscreenCanvas({
   }, [templateUri]);
 
   const handleClose = async () => {
-    // Reset orientation to portrait when exiting fullscreen
+    // Don't handle orientation here - let parent component handle it
+    // This prevents double orientation changes and ensures smooth transitions
     if (Platform.OS !== 'web') {
-      try {
-        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-      } catch (error) {
-        console.error('Failed to lock portrait orientation:', error);
-      }
       StatusBar.setHidden(false);
     }
     onClose();
@@ -584,10 +606,11 @@ export default function FullscreenCanvas({
     <Modal
       visible={internalVisible}
       transparent={false}
-      animationType="fade"
+      animationType="slide"
       presentationStyle="fullScreen"
-      supportedOrientations={["landscape", "landscape-left", "landscape-right"]}
+      supportedOrientations={["landscape", "landscape-left", "landscape-right", "portrait"]}
       statusBarTranslucent
+      onRequestClose={handleClose}
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
         <View style={styles.fullscreenContainer}>
@@ -961,18 +984,41 @@ export default function FullscreenCanvas({
                     />
                   </View>
                   <Text style={styles.sizeValueText}>{Math.round(currentBrushSize)}px</Text>
-                  <Slider
-                    style={styles.sizeSlider}
-                    value={currentBrushSize}
-                    minimumValue={2}
-                    maximumValue={50}
-                    onValueChange={(value: number) => {
-                      setCurrentBrushSize(value);
-                    }}
-                    minimumTrackTintColor="#6366f1"
-                    maximumTrackTintColor="#e5e7eb"
-                    thumbTintColor="#6366f1"
-                  />
+
+                  {/* Size control with buttons and slider */}
+                  <View style={styles.sizeControlContainer}>
+                    <TouchableOpacity
+                      style={styles.sizeControlButton}
+                      onPress={() => setCurrentBrushSize(Math.max(2, currentBrushSize - 1))}
+                    >
+                      <Feather name="minus" size={20} color="#6366f1" />
+                    </TouchableOpacity>
+
+                    <View style={styles.sliderContainer}>
+                      <TouchSlider
+                        value={currentBrushSize}
+                        onChange={(value: number) => {
+                          setCurrentBrushSize(value);
+                        }}
+                        min={2}
+                        max={50}
+                        step={1}
+                        fillColor="#6366f1"
+                        trackColor="#e5e7eb"
+                        thumbColor="#ffffff"
+                        thumbBorderColor="#4f46e5"
+                        trackHeight={6}
+                        thumbSize={24}
+                      />
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.sizeControlButton}
+                      onPress={() => setCurrentBrushSize(Math.min(50, currentBrushSize + 1))}
+                    >
+                      <Feather name="plus" size={20} color="#6366f1" />
+                    </TouchableOpacity>
+                  </View>
                   <TouchableOpacity
                     style={styles.modalCloseButton}
                     onPress={() => setShowSizePicker(false)}
@@ -1274,6 +1320,31 @@ const styles = StyleSheet.create({
   sizeSlider: {
     width: '100%',
     height: 40,
+  },
+  sizeControlContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginVertical: 8,
+  },
+  sizeControlButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f8fafc',
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  sliderContainer: {
+    flex: 1,
+    paddingHorizontal: 8,
   },
   modalCloseButton: {
     backgroundColor: '#6366f1',
