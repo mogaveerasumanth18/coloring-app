@@ -753,6 +753,8 @@ export default function IntegratedColoringBookApp({
                   trackColor="#E2E8F0"
                   thumbColor="#ffffff"
                   thumbBorderColor="#4f46e5"
+                  trackHeight={6}
+                  thumbSize={24}
                 />
               </View>
 

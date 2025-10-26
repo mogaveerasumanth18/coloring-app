@@ -667,7 +667,8 @@ export default function FullscreenCanvas({
               <TouchableOpacity
                 style={[
                   styles.toolButtonLeft,
-                  currentTool === 'move' && styles.toolButtonLeftActive
+                  currentTool === 'move' && styles.toolButtonLeftActive,
+                  currentTool === 'move' && styles.toolButtonLeftExpanded
                 ]}
                 onPress={() => {
                   console.log('Move tool selected');
@@ -697,42 +698,56 @@ export default function FullscreenCanvas({
                 <Text style={styles.toolButtonText}>Color</Text>
               </TouchableOpacity>
 
-              {/* Compact Preview Section */}
-              <View style={styles.compactPreviewSection}>
-                {/* Color Preview */}
-                <View style={styles.compactPreviewContainer}>
-                  <Text style={styles.compactPreviewLabel}>Color:</Text>
-                  <TouchableOpacity
-                    style={[styles.compactColorPreview, { backgroundColor: currentColor }]}
-                    onPress={() => {
-                      console.log('Color preview tapped, opening picker');
-                      setShowColorPicker(true);
-                    }}
-                  />
-                </View>
-
-                {/* Size Preview */}
-                <View style={styles.compactPreviewContainer}>
-                  <Text style={styles.compactPreviewLabel}>Size:</Text>
-                  <TouchableOpacity
-                    style={styles.compactSizePreview}
-                    onPress={() => {
-                      console.log('Size preview tapped, opening picker');
-                      setShowSizePicker(true);
-                    }}
-                  >
-                    <View
-                      style={[
-                        styles.compactSizeCircle,
-                        {
-                          width: Math.max(4, Math.min(16, currentBrushSize * 0.3)),
-                          height: Math.max(4, Math.min(16, currentBrushSize * 0.3)),
-                        }
-                      ]}
+              {/* Compact Preview Section - Hide when Move tool is active to save space */}
+              {currentTool !== 'move' && (
+                <View style={styles.compactPreviewSection}>
+                  {/* Color Preview */}
+                  <View style={styles.compactPreviewContainer}>
+                    <Text style={styles.compactPreviewLabel}>Color:</Text>
+                    <TouchableOpacity
+                      style={[styles.compactColorPreview, { backgroundColor: currentColor }]}
+                      onPress={() => {
+                        console.log('Color preview tapped, opening picker');
+                        setShowColorPicker(true);
+                      }}
                     />
-                  </TouchableOpacity>
+                  </View>
+
+                  {/* Size Preview */}
+                  <View style={styles.compactPreviewContainer}>
+                    <Text style={styles.compactPreviewLabel}>Size:</Text>
+                    <TouchableOpacity
+                      style={styles.compactSizePreview}
+                      onPress={() => {
+                        console.log('Size preview tapped, opening picker');
+                        setShowSizePicker(true);
+                      }}
+                    >
+                      <View
+                        style={[
+                          styles.compactSizeCircle,
+                          {
+                            width: Math.max(4, Math.min(16, currentBrushSize * 0.3)),
+                            height: Math.max(4, Math.min(16, currentBrushSize * 0.3)),
+                          }
+                        ]}
+                      />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
+              )}
+
+              {/* Move Tool Status - Show compact info when Move is active */}
+              {currentTool === 'move' && (
+                <View style={styles.moveToolStatus}>
+                  <Text style={styles.moveToolStatusText}>
+                    Zoom: {currentScale.toFixed(1)}x
+                  </Text>
+                  <Text style={styles.moveToolStatusSubtext}>
+                    Pinch to zoom • Drag to pan
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Main Content Area */}
@@ -1007,8 +1022,8 @@ export default function FullscreenCanvas({
                         trackColor="#e5e7eb"
                         thumbColor="#ffffff"
                         thumbBorderColor="#4f46e5"
-                        trackHeight={6}
-                        thumbSize={24}
+                        trackHeight={8}
+                        thumbSize={28}
                       />
                     </View>
 
@@ -1052,18 +1067,20 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingHorizontal: 12,
     paddingBottom: 8,
+    justifyContent: 'flex-start',
   },
   toolButtonLeft: {
     backgroundColor: '#6366f1',
     borderRadius: 24,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginBottom: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 4,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     borderWidth: 2,
     borderColor: 'transparent',
+    minHeight: 44,
   },
   toolButtonLeftActive: {
     backgroundColor: '#4338ca',
@@ -1074,6 +1091,11 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
     transform: [{ scale: 1.05 }],
+  },
+  toolButtonLeftExpanded: {
+    paddingVertical: 10,
+    marginBottom: 6,
+    minHeight: 60,
   },
   toolButtonTextContainer: {
     flex: 1,
@@ -1121,29 +1143,29 @@ const styles = StyleSheet.create({
   },
   // Compact preview styles for better fit
   compactPreviewSection: {
-    gap: 2,
-    marginTop: 8,
+    gap: 1,
+    marginTop: 6,
   },
   compactPreviewContainer: {
-    marginTop: 2,
+    marginTop: 1,
   },
   compactPreviewLabel: {
     color: '#64748b',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '500',
-    marginBottom: 3,
+    marginBottom: 2,
   },
   compactColorPreview: {
-    width: 90,
-    height: 24,
-    borderRadius: 6,
+    width: 85,
+    height: 20,
+    borderRadius: 5,
     borderWidth: 2,
     borderColor: '#e5e7eb',
   },
   compactSizePreview: {
-    width: 90,
-    height: 24,
-    borderRadius: 6,
+    width: 85,
+    height: 20,
+    borderRadius: 5,
     backgroundColor: '#f8fafc',
     borderWidth: 2,
     borderColor: '#e5e7eb',
@@ -1153,6 +1175,29 @@ const styles = StyleSheet.create({
   compactSizeCircle: {
     backgroundColor: '#6366f1',
     borderRadius: 100,
+  },
+
+  // Move tool status styles
+  moveToolStatus: {
+    backgroundColor: 'rgba(67, 56, 202, 0.1)',
+    borderRadius: 12,
+    padding: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(67, 56, 202, 0.2)',
+  },
+  moveToolStatusText: {
+    color: '#4338ca',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  moveToolStatusSubtext: {
+    color: '#6366f1',
+    fontSize: 10,
+    fontWeight: '400',
+    textAlign: 'center',
+    marginTop: 2,
   },
 
   // Main Content

@@ -76,6 +76,8 @@ export const TouchSlider: React.FC<TouchSliderProps> = ({
   const tapGesture = Gesture.Tap()
     .enabled(!disabled)
     .onStart((event) => {
+      if (isDragging) return; // Don't handle tap if already dragging
+
       const newPosition = clamp(event.x, 0, trackWidth);
       const newValue = positionToValue(newPosition);
       runOnJS(onChange)(newValue);
@@ -87,11 +89,18 @@ export const TouchSlider: React.FC<TouchSliderProps> = ({
 
   const panGesture = Gesture.Pan()
     .enabled(!disabled)
-    .onStart(() => {
-      setIsDragging(true);
+    .onStart((event) => {
+      runOnJS(setIsDragging)(true);
       scale.value = withSpring(1.2, { damping: 15, stiffness: 200 });
+
+      // Set initial position based on touch
+      const initialPosition = clamp(event.x, 0, trackWidth);
+      translateX.value = initialPosition;
+      const initialValue = positionToValue(initialPosition);
+      runOnJS(onChange)(initialValue);
+
+      // Haptic feedback on start (if available)
       runOnJS(() => {
-        // Haptic feedback on start (if available)
         try {
           if (Platform.OS === 'ios') {
             const { HapticFeedback } = require('expo-haptics');
@@ -109,10 +118,11 @@ export const TouchSlider: React.FC<TouchSliderProps> = ({
       runOnJS(onChange)(newValue);
     })
     .onEnd(() => {
-      setIsDragging(false);
+      runOnJS(setIsDragging)(false);
       scale.value = withSpring(1, { damping: 15, stiffness: 200 });
-      // Snap to final position
-      translateX.value = withSpring(valueToPosition(value), {
+      // Snap to final position based on current value
+      const finalPosition = valueToPosition(value);
+      translateX.value = withSpring(finalPosition, {
         damping: 20,
         stiffness: 300,
       });
@@ -120,13 +130,9 @@ export const TouchSlider: React.FC<TouchSliderProps> = ({
     .shouldCancelWhenOutside(false)
     .minDistance(0);
 
-  // Combine tap and pan gestures
-  const combinedGesture = Gesture.Race(tapGesture, panGesture);
-
   const thumbStyle = useAnimatedStyle(() => {
     return {
       transform: [
-        { translateX: translateX.value - thumbSize / 2 },
         { scale: scale.value },
       ],
     };
@@ -138,51 +144,62 @@ export const TouchSlider: React.FC<TouchSliderProps> = ({
     };
   });
 
-  const thumbPosition = valueToPosition(value);
+  const thumbAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateX: translateX.value - thumbSize / 2 },
+        { scale: scale.value },
+      ],
+    };
+  });
 
   return (
     <View style={[styles.container, style]}>
-      <GestureDetector gesture={tapGesture}>
-        <View
+      <View
+        style={[
+          styles.track,
+          {
+            backgroundColor: trackColor,
+            height: trackHeight,
+            borderRadius: trackHeight / 2,
+          }
+        ]}
+        onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+      >
+        <Animated.View
           style={[
-            styles.track,
+            styles.fill,
             {
-              backgroundColor: trackColor,
-              height: trackHeight,
+              backgroundColor: fillColor,
               borderRadius: trackHeight / 2,
-            }
+            },
+            fillStyle
           ]}
-          onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
-        >
+        />
+
+        {/* Invisible touch area for better gesture detection */}
+        <GestureDetector gesture={Gesture.Race(tapGesture, panGesture)}>
+          <View style={styles.touchArea} />
+        </GestureDetector>
+
+        {/* Visible thumb */}
+        <GestureDetector gesture={panGesture}>
           <Animated.View
             style={[
-              styles.fill,
+              styles.thumb,
               {
-                backgroundColor: fillColor,
-                borderRadius: trackHeight / 2,
+                backgroundColor: thumbColor,
+                borderColor: thumbBorderColor,
+                width: thumbSize,
+                height: thumbSize,
+                borderRadius: thumbSize / 2,
+                top: -(thumbSize - trackHeight) / 2,
               },
-              fillStyle
+              thumbAnimatedStyle,
             ]}
           />
-          <GestureDetector gesture={combinedGesture}>
-            <Animated.View
-              style={[
-                styles.thumb,
-                {
-                  backgroundColor: thumbColor,
-                  borderColor: thumbBorderColor,
-                  width: thumbSize,
-                  height: thumbSize,
-                  borderRadius: thumbSize / 2,
-                  left: thumbPosition - thumbSize / 2,
-                  top: -(thumbSize - trackHeight) / 2,
-                },
-                thumbStyle,
-              ]}
-            />
-          </GestureDetector>
-        </View>
-      </GestureDetector>
+        </GestureDetector>
+      </View>
     </View>
   );
 };
@@ -190,18 +207,26 @@ export const TouchSlider: React.FC<TouchSliderProps> = ({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 4,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   track: {
     width: '100%',
     position: 'relative',
-    overflow: 'hidden',
+    overflow: 'visible', // Allow thumb to extend beyond track
   },
   fill: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
+  },
+  touchArea: {
+    position: 'absolute',
+    left: -10,
+    right: -10,
+    top: -15,
+    bottom: -15,
+    backgroundColor: 'transparent',
   },
   thumb: {
     position: 'absolute',
