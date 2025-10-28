@@ -156,6 +156,18 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
   const updateDataUrl = useCallback(async (currentBitmap: ColoringBitmap): Promise<void> => {
     try {
+      console.log('🔄 Updating data URL for bitmap:', currentBitmap.width, 'x', currentBitmap.height);
+
+      // Validate bitmap data
+      if (!currentBitmap.data || currentBitmap.data.length === 0) {
+        throw new Error('Invalid bitmap data - empty or null');
+      }
+
+      const expectedLength = currentBitmap.width * currentBitmap.height * 4;
+      if (currentBitmap.data.length !== expectedLength) {
+        throw new Error(`Invalid bitmap data length: expected ${expectedLength}, got ${currentBitmap.data.length}`);
+      }
+
       // Convert RGBA pixel buffer to a PNG using upng-js on both web and native
       const pngArrayBuffer = (UPNG as any).encode(
         [currentBitmap.data.buffer],
@@ -174,11 +186,19 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       }
       const base64Png = btoa(binary);
       const uri = `data:image/png;base64,${base64Png}`;
-  setDataUrl((prev) => (prev === uri ? prev : uri));
 
-  if (onCompleteRef.current) onCompleteRef.current(uri);
+      console.log('✅ Successfully generated data URL, length:', uri.length);
+      setDataUrl((prev) => (prev === uri ? prev : uri));
+
+      if (onCompleteRef.current) onCompleteRef.current(uri);
     } catch (error) {
-      console.error('Failed to update data URL:', error);
+      console.error('❌ Failed to update data URL:', error);
+      console.error('Bitmap details:', {
+        width: currentBitmap?.width,
+        height: currentBitmap?.height,
+        dataLength: currentBitmap?.data?.length,
+        expectedLength: currentBitmap ? currentBitmap.width * currentBitmap.height * 4 : 0
+      });
       // Fallback: simple 1x1 white PNG
       const transparentPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
       setDataUrl(`data:image/png;base64,${transparentPng}`);
@@ -233,48 +253,65 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
   const loadTemplate = useCallback(async () => {
     const sourceUri = initialDataUrl || templateUri;
-    if (!sourceUri) return;
+    if (!sourceUri) {
+      console.warn('⚠️ No source URI provided for template loading');
+      return;
+    }
+
+    console.log('🔄 Loading template from:', sourceUri.startsWith('data:') ? 'data URL' : 'file URI');
 
     try {
+      // Reset initialization state
+      setIsInitialized(false);
+
       let imageData: Uint8Array;
       let imgWidth: number;
       let imgHeight: number;
 
       if (sourceUri.startsWith('data:')) {
-        // Handle data URL
+        // Handle data URL (Gemini-generated templates)
+        console.log('📄 Processing data URL template');
         const base64Data = sourceUri.split(',')[1];
+        if (!base64Data) {
+          throw new Error('Invalid data URL format - missing base64 data');
+        }
+
         const binaryString = atob(base64Data);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
-        
+
         const decoded = UPNG.decode(bytes.buffer);
         imageData = new Uint8Array(UPNG.toRGBA8(decoded)[0]);
         imgWidth = decoded.width;
         imgHeight = decoded.height;
+        console.log(`📐 Data URL image dimensions: ${imgWidth}x${imgHeight}`);
       } else {
-        // Handle file URI
+        // Handle file URI (PNG templates)
+        console.log('📁 Processing file URI template');
         const base64Data = await FileSystem.readAsStringAsync(sourceUri, {
           encoding: FileSystem.EncodingType.Base64,
         });
-        
+
         const binaryString = atob(base64Data);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
-        
+
         const decoded = UPNG.decode(bytes.buffer);
         imageData = new Uint8Array(UPNG.toRGBA8(decoded)[0]);
         imgWidth = decoded.width;
         imgHeight = decoded.height;
+        console.log(`📐 File URI image dimensions: ${imgWidth}x${imgHeight}`);
       }
 
       // Fit into view box and downscale pixel data to displayed size to reduce per-pixel work
       const viewBoxW = width || DEFAULT_CANVAS_SIZE;
       const viewBoxH = height || DEFAULT_CANVAS_SIZE;
       const fitted = fitIntoBox(imgWidth, imgHeight, viewBoxW, viewBoxH);
+      console.log(`📏 Fitted dimensions: ${fitted.width}x${fitted.height} (viewBox: ${viewBoxW}x${viewBoxH})`);
 
       const newBitmap: ColoringBitmap =
         (imgWidth !== fitted.width || imgHeight !== fitted.height)
@@ -283,32 +320,35 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
       setBitmap(newBitmap);
       setOriginalTemplate(cloneBitmap(newBitmap)); // Store original template for eraser
-  setCanvasSize({ width: fitted.width, height: fitted.height });
-  // Build robust masks from the loaded template and allocate reusable work buffers
-  boundaryMaskRef.current = computeBoundaryMask(newBitmap);
-  strongBoundaryMaskRef.current = computeStrongBoundaryMask(newBitmap);
-  visitedRef.current = new Uint8Array(newBitmap.width * newBitmap.height);
-  filledMaskRef.current = new Uint8Array(newBitmap.width * newBitmap.height);
+      setCanvasSize({ width: fitted.width, height: fitted.height });
+
+      // Build robust masks from the loaded template and allocate reusable work buffers
+      boundaryMaskRef.current = computeBoundaryMask(newBitmap);
+      strongBoundaryMaskRef.current = computeStrongBoundaryMask(newBitmap);
+      visitedRef.current = new Uint8Array(newBitmap.width * newBitmap.height);
+      filledMaskRef.current = new Uint8Array(newBitmap.width * newBitmap.height);
+
       await updateDataUrl(newBitmap);
-      
+
       // Save initial state to history
       setHistory([cloneBitmap(newBitmap)]);
       setHistoryIndex(0);
-      
+
       setIsInitialized(true);
       console.log('✅ Template loaded and scaled successfully');
     } catch (error) {
       console.error('❌ Failed to load template:', error);
+      console.error('Error details:', error);
       await createFallbackTemplate();
     }
   }, [templateUri, initialDataUrl, width, height, updateDataUrl, cloneBitmap]);
 
   const createFallbackTemplate = useCallback(async () => {
-  const viewBoxW = width || DEFAULT_CANVAS_SIZE;
-  const viewBoxH = height || DEFAULT_CANVAS_SIZE;
-  // Generate a square fallback bitmap but fit its display into the requested box
-  const templateWidth = Math.min(viewBoxW, viewBoxH);
-  const templateHeight = Math.min(viewBoxW, viewBoxH);
+    const viewBoxW = width || DEFAULT_CANVAS_SIZE;
+    const viewBoxH = height || DEFAULT_CANVAS_SIZE;
+    // Generate a square fallback bitmap but fit its display into the requested box
+    const templateWidth = Math.min(viewBoxW, viewBoxH);
+    const templateHeight = Math.min(viewBoxW, viewBoxH);
     const pixelCount = templateWidth * templateHeight;
     const fallbackData = new Uint8Array(pixelCount * 4);
 
@@ -332,7 +372,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         const dx = x - centerX;
         const dy = y - centerY;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        
+
         if (Math.abs(distance - radius) < 2) {
           const index = (y * templateWidth + x) * 4;
           fallbackData[index] = 0;     // R - black
@@ -352,19 +392,19 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     setBitmap(fallbackBitmap);
     setOriginalTemplate(cloneBitmap(fallbackBitmap)); // Store original template for eraser
     // Use provided dimensions for fullscreen mode
-  const fitted = fitIntoBox(templateWidth, templateHeight, viewBoxW, viewBoxH);
-  setCanvasSize({ width: fitted.width, height: fitted.height });
-  // Build boundary masks for fallback as well
-  boundaryMaskRef.current = computeBoundaryMask(fallbackBitmap);
-  strongBoundaryMaskRef.current = computeStrongBoundaryMask(fallbackBitmap);
-  visitedRef.current = new Uint8Array(fallbackBitmap.width * fallbackBitmap.height);
-  filledMaskRef.current = new Uint8Array(fallbackBitmap.width * fallbackBitmap.height);
+    const fitted = fitIntoBox(templateWidth, templateHeight, viewBoxW, viewBoxH);
+    setCanvasSize({ width: fitted.width, height: fitted.height });
+    // Build boundary masks for fallback as well
+    boundaryMaskRef.current = computeBoundaryMask(fallbackBitmap);
+    strongBoundaryMaskRef.current = computeStrongBoundaryMask(fallbackBitmap);
+    visitedRef.current = new Uint8Array(fallbackBitmap.width * fallbackBitmap.height);
+    filledMaskRef.current = new Uint8Array(fallbackBitmap.width * fallbackBitmap.height);
     await updateDataUrl(fallbackBitmap);
-    
+
     // Save initial state to history
     setHistory([cloneBitmap(fallbackBitmap)]);
     setHistoryIndex(0);
-    
+
     setIsInitialized(true);
     console.log('✅ Created fallback template');
   }, [width, height, updateDataUrl, cloneBitmap]);
@@ -630,9 +670,9 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       if (!workingDataRef.current || workingDataRef.current.length !== bitmap.data.length) {
         workingDataRef.current = new Uint8Array(bitmap.data);
       }
-  const newData = workingDataRef.current;
-  // Interpret brushWidth as visual stroke width; convert to bitmap radius
-  const brushRadius = Math.max(1, Math.floor((brushWidth / 2) * Math.min(scaleX, scaleY)));
+      const newData = workingDataRef.current;
+      // Interpret brushWidth as visual stroke width; convert to bitmap radius
+      const brushRadius = Math.max(1, Math.floor((brushWidth / 2) * Math.min(scaleX, scaleY)));
 
       // Helper to stamp a circular brush at integer coords
       const stampAt = (cx: number, cy: number) => {
@@ -685,8 +725,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       }
       lastPointRef.current = { x: bitmapX, y: bitmapY };
 
-  const newBitmap: ColoringBitmap = { width: bitmap.width, height: bitmap.height, data: newData };
-  // Do not setBitmap on every move; we only update the preview (dataUrl) below
+      const newBitmap: ColoringBitmap = { width: bitmap.width, height: bitmap.height, data: newData };
+      // Do not setBitmap on every move; we only update the preview (dataUrl) below
       // Reduce live update frequency during drawing to prevent flash
       if (encodeDebounceRef.current) clearTimeout(encodeDebounceRef.current);
       encodeDebounceRef.current = setTimeout(() => {
@@ -696,7 +736,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
           encodeInFlightRef.current = false;
         });
       }, 200); // Increased debounce time to reduce flashing
-  // Keep final high-quality encode to stroke end
+      // Keep final high-quality encode to stroke end
     } catch (error) {
       console.error('❌ Error during brush stroke:', error);
     }
@@ -768,10 +808,10 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
           saveToHistory(bitmap);
           await updateDataUrl(bitmap);
         }
-  workingDataRef.current = null;
+        workingDataRef.current = null;
         lastPointRef.current = null;
-  // Keep preview visible until the new image has loaded; then fade it out
-  waitingForImageLoadRef.current = true;
+        // Keep preview visible until the new image has loaded; then fade it out
+        waitingForImageLoadRef.current = true;
         // final encode was handled above
       }
     },
@@ -779,19 +819,20 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
   useEffect(() => {
     const initializeCanvas = async () => {
-      // Only initialize if we haven't been initialized yet or if templateUri actually changed to a different value
-      if (!isInitialized || (templateUri && templateUri !== initialDataUrl)) {
-        if (templateUri) {
-          await loadTemplate();
-        } else {
-          await createFallbackTemplate();
-        }
+      // Initialize when we have a template URI or initial data URL, or when template changes
+      const sourceUri = initialDataUrl || templateUri;
+      if (sourceUri) {
+        console.log('🎯 Initializing canvas with source:', sourceUri.substring(0, 50) + '...');
+        await loadTemplate();
+      } else {
+        console.log('🎯 No template provided, creating fallback');
+        await createFallbackTemplate();
       }
     };
 
     initializeCanvas();
-  // Reinitialize only when templateUri changes and component isn't already initialized
-  }, [templateUri, isInitialized]);
+    // Reinitialize when templateUri or initialDataUrl changes
+  }, [templateUri, initialDataUrl]);
 
   return (
     <View style={styles.container} pointerEvents={interactionEnabled ? 'auto' : 'none'}>
@@ -809,7 +850,17 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
             }}
             resizeMode="contain"
             transition={0}
+            onLoadStart={() => {
+              console.log('🖼️ Image loading started');
+            }}
+            onLoad={() => {
+              console.log('🖼️ Image loaded successfully');
+            }}
+            onError={(error) => {
+              console.error('🖼️ Image load error:', error);
+            }}
             onLoadEnd={() => {
+              console.log('🖼️ Image load ended');
               if (waitingForImageLoadRef.current) {
                 // Smooth fade out of stroke preview to avoid flash
                 setTimeout(() => {
@@ -821,7 +872,9 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
           />
         ) : (
           <View style={[styles.placeholder, { width: canvasSize.width, height: canvasSize.height }]}>
-            <Text style={styles.placeholderText}>Loading template...</Text>
+            <Text style={styles.placeholderText}>
+              {isInitialized ? 'No template loaded' : 'Loading template...'}
+            </Text>
           </View>
         )}
         {/* Live stroke preview overlay (cheap, smooth) */}

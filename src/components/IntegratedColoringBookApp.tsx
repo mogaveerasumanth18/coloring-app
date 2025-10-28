@@ -587,6 +587,9 @@ export default function IntegratedColoringBookApp({
       );
       return;
     }
+
+    console.log('🎯 New template selected:', fileName, 'URI type:', bitmapUri.startsWith('data:') ? 'data URL' : 'file URI');
+
     setCurrentTemplate({
       svgData: null,
       fileName,
@@ -595,7 +598,7 @@ export default function IntegratedColoringBookApp({
       height: 480,
       type: 'png',
     });
-    // New template => clear previous snapshot
+    // New template => clear previous snapshot to force fresh load
     setCanvasSnapshot(null);
     setActiveTab('color');
   };
