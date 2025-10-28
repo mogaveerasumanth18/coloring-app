@@ -277,6 +277,12 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         }
 
         const binaryString = atob(base64Data);
+
+        const mimeType = sourceUri.substring(5, sourceUri.indexOf(';'));
+        if (mimeType !== 'image/png') {
+          throw new Error(`Unsupported image type: ${mimeType}. Only PNG is supported for now.`);
+        }
+
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i);
@@ -353,13 +359,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     const fallbackData = new Uint8Array(pixelCount * 4);
 
     // Fill with white background and black outlines
-    for (let i = 0; i < pixelCount; i++) {
-      const index = i * 4;
-      fallbackData[index] = 255;     // R
-      fallbackData[index + 1] = 255; // G  
-      fallbackData[index + 2] = 255; // B
-      fallbackData[index + 3] = 255; // A
-    }
+    fallbackData.fill(255); // Fill with white (RGBA 255,255,255,255)
 
     // Add some simple black outlines (simple shapes)
     const centerX = Math.floor(templateWidth / 2);

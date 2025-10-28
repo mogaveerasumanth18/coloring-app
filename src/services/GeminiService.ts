@@ -13,7 +13,7 @@ export const GeminiService = {
         {
           role: 'user',
           parts: [
-            { text: 'Generate a simple coloring-book outline: black closed 2D lines only, no shading, all areas flood-fillable.' },
+            { text: 'Generate a simple coloring-book outline in PNG format: black closed 2D lines only, no shading, all areas flood-fillable.' },
             // REST uses snake_case for request payloads
             { inline_data: { mime_type: mimeType, data: imageBase64 } },
           ],
