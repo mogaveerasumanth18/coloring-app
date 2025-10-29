@@ -70,6 +70,8 @@ export const ZebraCanvas = React.forwardRef<any, ZebraCanvasProps>(({
   const loadTemplate = useCallback(async () => {
     if (!canvasRef.current || !templateUri) return;
 
+    console.log('ZebraCanvas loading template:', templateUri.substring(0, 100));
+
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -79,12 +81,22 @@ export const ZebraCanvas = React.forwardRef<any, ZebraCanvasProps>(({
       img.crossOrigin = 'anonymous';
 
       img.onload = () => {
+        console.log(`Image loaded with dimensions: ${img.width}x${img.height}`);
         // Clear canvas with white background
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Draw template image
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        // Draw template image, preserving aspect ratio and centering it
+        if (img.width > 0 && img.height > 0) {
+          const hRatio = canvas.width / img.width;
+          const vRatio = canvas.height / img.height;
+          const ratio = Math.min(hRatio, vRatio);
+          const drawWidth = img.width * ratio;
+          const drawHeight = img.height * ratio;
+          const centerShiftX = (canvas.width - drawWidth) / 2;
+          const centerShiftY = (canvas.height - drawHeight) / 2;
+          ctx.drawImage(img, centerShiftX, centerShiftY, drawWidth, drawHeight);
+        }
 
         setIsInitialized(true);
         console.log('✅ Template loaded successfully');
