@@ -286,10 +286,45 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         if (imageData.length >= 12) {
           const r = imageData[0], g = imageData[1], b = imageData[2];
           const isYellow = r > 200 && g > 200 && b < 100;
+          const isWhite = r > 240 && g > 240 && b > 240;
+          const isBlack = r < 50 && g < 50 && b < 50;
+
           if (isYellow) {
             onDebug?.(`🟡 WARNING: First pixel is yellow! RGB(${r},${g},${b})`);
+          } else if (isWhite) {
+            onDebug?.(`⚪ First pixel is white: RGB(${r},${g},${b}) ✓`);
+          } else if (isBlack) {
+            onDebug?.(`⚫ First pixel is black: RGB(${r},${g},${b}) ✓`);
           } else {
             onDebug?.(`🎨 First pixel: RGB(${r},${g},${b})`);
+          }
+
+          // Check if this looks like a proper coloring book template
+          let whitePixels = 0;
+          let blackPixels = 0;
+          let otherPixels = 0;
+
+          // Sample first 100 pixels
+          for (let i = 0; i < Math.min(400, imageData.length); i += 4) {
+            const pr = imageData[i], pg = imageData[i + 1], pb = imageData[i + 2];
+            if (pr > 240 && pg > 240 && pb > 240) {
+              whitePixels++;
+            } else if (pr < 50 && pg < 50 && pb < 50) {
+              blackPixels++;
+            } else {
+              otherPixels++;
+            }
+          }
+
+          const total = whitePixels + blackPixels + otherPixels;
+          const whitePercent = Math.round((whitePixels / total) * 100);
+          const blackPercent = Math.round((blackPixels / total) * 100);
+          const otherPercent = Math.round((otherPixels / total) * 100);
+
+          onDebug?.(`📊 Pixel analysis: ${whitePercent}% white, ${blackPercent}% black, ${otherPercent}% other`);
+
+          if (otherPercent > 20) {
+            onDebug?.(`⚠️ WARNING: Too many colored pixels (${otherPercent}%), may not work well for coloring`);
           }
         }
       } else {
@@ -848,7 +883,17 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
             }}
             resizeMode="contain"
             transition={0}
+            onLoadStart={() => {
+              onDebug?.('🖼️ Image loading started...');
+            }}
+            onLoad={() => {
+              onDebug?.('🖼️ Image loaded successfully!');
+            }}
+            onError={(error) => {
+              onDebug?.(`🖼️ Image load error: ${error.nativeEvent?.error || 'Unknown error'}`);
+            }}
             onLoadEnd={() => {
+              onDebug?.('🖼️ Image load ended');
               if (waitingForImageLoadRef.current) {
                 // Smooth fade out of stroke preview to avoid flash
                 setTimeout(() => {
@@ -860,7 +905,14 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
           />
         ) : (
           <View style={[styles.placeholder, { width: canvasSize.width, height: canvasSize.height }]}>
-            <Text style={styles.placeholderText}>Loading template...</Text>
+            <Text style={styles.placeholderText}>
+              {isInitialized ? 'No image data' : 'Loading template...'}
+            </Text>
+            {isInitialized && (
+              <Text style={styles.placeholderText}>
+                DataURL: {dataUrl ? 'Present' : 'Missing'}
+              </Text>
+            )}
           </View>
         )}
         {/* Live stroke preview overlay (cheap, smooth) */}

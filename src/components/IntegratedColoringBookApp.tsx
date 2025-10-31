@@ -42,24 +42,36 @@ import { TouchSlider } from './TouchSlider';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-// Simple Toast Component for debugging
-const Toast = ({ message, visible, onHide }: { message: string; visible: boolean; onHide: () => void }) => {
-  useEffect(() => {
-    if (visible) {
-      const timer = setTimeout(onHide, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [visible, onHide]);
-
-  if (!visible) return null;
+// Debug Toast Component - persists until manually dismissed
+const DebugToast = ({ messages, visible, onHide, onClear }: {
+  messages: string[];
+  visible: boolean;
+  onHide: () => void;
+  onClear: () => void;
+}) => {
+  if (!visible || messages.length === 0) return null;
 
   return (
-    <View style={styles.toastContainer}>
-      <View style={styles.toast}>
-        <Text style={styles.toastText}>{message}</Text>
-        <TouchableOpacity onPress={onHide} style={styles.toastClose}>
-          <Text style={styles.toastCloseText}>×</Text>
-        </TouchableOpacity>
+    <View style={styles.debugToastContainer}>
+      <View style={styles.debugToast}>
+        <View style={styles.debugToastHeader}>
+          <Text style={styles.debugToastTitle}>🐛 Debug Log</Text>
+          <View style={styles.debugToastActions}>
+            <TouchableOpacity onPress={onClear} style={styles.debugToastButton}>
+              <Text style={styles.debugToastButtonText}>Clear</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onHide} style={styles.debugToastButton}>
+              <Text style={styles.debugToastButtonText}>Hide</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <ScrollView style={styles.debugToastMessages} showsVerticalScrollIndicator={true}>
+          {messages.map((message, index) => (
+            <Text key={index} style={styles.debugToastMessage}>
+              {message}
+            </Text>
+          ))}
+        </ScrollView>
       </View>
     </View>
   );
@@ -158,13 +170,23 @@ export default function IntegratedColoringBookApp({
   const panGestureRef = useRef<any>(null);
   const pinchGestureRef = useRef<any>(null);
 
-  // Toast for debugging
-  const [toastMessage, setToastMessage] = useState<string>('');
-  const [showToast, setShowToast] = useState<boolean>(false);
+  // Debug toast for persistent debugging
+  const [debugMessages, setDebugMessages] = useState<string[]>([]);
+  const [showDebugToast, setShowDebugToast] = useState<boolean>(false);
 
-  const showDebugToast = (message: string) => {
-    setToastMessage(message);
-    setShowToast(true);
+  const addDebugMessage = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    const timestampedMessage = `[${timestamp}] ${message}`;
+    setDebugMessages(prev => [...prev, timestampedMessage]);
+    setShowDebugToast(true);
+  };
+
+  const clearDebugMessages = () => {
+    setDebugMessages([]);
+  };
+
+  const hideDebugToast = () => {
+    setShowDebugToast(false);
   };
 
   // Native gesture for slider
@@ -613,7 +635,7 @@ export default function IntegratedColoringBookApp({
     fileName: string
   ) => {
     if (!bitmapUri || bitmapUri === 'null' || bitmapUri === 'undefined') {
-      showDebugToast('❌ Invalid template URI');
+      addDebugMessage('❌ Invalid template URI');
       Alert.alert(
         'Error',
         'Invalid template selected. Please try another template.'
@@ -623,7 +645,7 @@ export default function IntegratedColoringBookApp({
 
     const uriType = bitmapUri.startsWith('data:') ? 'data URL' : 'file URI';
     const uriLength = bitmapUri.length;
-    showDebugToast(`🎯 Template selected: ${fileName} (${uriType}, ${uriLength} chars)`);
+    addDebugMessage(`🎯 Template selected: ${fileName} (${uriType}, ${uriLength} chars)`);
 
     setCurrentTemplate({
       svgData: null,
@@ -712,7 +734,7 @@ export default function IntegratedColoringBookApp({
                     height={(screenWidth - 32) * 0.8}
                     interactionEnabled={selectedTool !== 'move' && !showColorTray}
                     initialDataUrl={canvasSnapshot ?? undefined}
-                    onDebug={showDebugToast}
+                    onDebug={addDebugMessage}
                   />
                 </Animated.View>
               </GestureDetector>
@@ -954,10 +976,11 @@ export default function IntegratedColoringBookApp({
       />
 
       {/* Debug Toast */}
-      <Toast
-        message={toastMessage}
-        visible={showToast}
-        onHide={() => setShowToast(false)}
+      <DebugToast
+        messages={debugMessages}
+        visible={showDebugToast}
+        onHide={hideDebugToast}
+        onClear={clearDebugMessages}
       />
 
       {/* Color tray modal */}
@@ -2228,37 +2251,66 @@ const styles = StyleSheet.create({
     height: 30
   },
 
-  // Toast styles for debugging
-  toastContainer: {
+  // Debug Toast styles
+  debugToastContainer: {
     position: 'absolute',
-    top: 100,
-    left: 20,
-    right: 20,
+    top: 80,
+    left: 10,
+    right: 10,
     zIndex: 9999,
-    alignItems: 'center',
+    maxHeight: '60%',
   },
-  toast: {
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  debugToast: {
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#333',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  debugToastHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    maxWidth: '90%',
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
   },
-  toastText: {
+  debugToastTitle: {
     color: '#FFFFFF',
-    fontSize: 14,
-    flex: 1,
-  },
-  toastClose: {
-    marginLeft: 12,
-    paddingHorizontal: 8,
-  },
-  toastCloseText: {
-    color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
+  },
+  debugToastActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  debugToastButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#444',
+    borderRadius: 6,
+  },
+  debugToastButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  debugToastMessages: {
+    maxHeight: 300,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  debugToastMessage: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    marginBottom: 4,
+    lineHeight: 16,
   },
 
 });
