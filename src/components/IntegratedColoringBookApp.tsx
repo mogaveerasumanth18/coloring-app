@@ -41,6 +41,29 @@ import ColorPicker from 'react-native-wheel-color-picker';
 import { TouchSlider } from './TouchSlider';
 
 const { width: screenWidth } = Dimensions.get('window');
+
+// Simple Toast Component for debugging
+const Toast = ({ message, visible, onHide }: { message: string; visible: boolean; onHide: () => void }) => {
+  useEffect(() => {
+    if (visible) {
+      const timer = setTimeout(onHide, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [visible, onHide]);
+
+  if (!visible) return null;
+
+  return (
+    <View style={styles.toastContainer}>
+      <View style={styles.toast}>
+        <Text style={styles.toastText}>{message}</Text>
+        <TouchableOpacity onPress={onHide} style={styles.toastClose}>
+          <Text style={styles.toastCloseText}>×</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
 // UI sizing constants for responsive palette/slider
 const MODAL_SIDE_PADDING = 16;
 const SWATCH_GAP = 12;
@@ -134,6 +157,15 @@ export default function IntegratedColoringBookApp({
   // Gesture/refs helpers (keeping refs for compatibility)
   const panGestureRef = useRef<any>(null);
   const pinchGestureRef = useRef<any>(null);
+
+  // Toast for debugging
+  const [toastMessage, setToastMessage] = useState<string>('');
+  const [showToast, setShowToast] = useState<boolean>(false);
+
+  const showDebugToast = (message: string) => {
+    setToastMessage(message);
+    setShowToast(true);
+  };
 
   // Native gesture for slider
   const sliderNativeGesture = Gesture.Native();
@@ -581,6 +613,7 @@ export default function IntegratedColoringBookApp({
     fileName: string
   ) => {
     if (!bitmapUri || bitmapUri === 'null' || bitmapUri === 'undefined') {
+      showDebugToast('❌ Invalid template URI');
       Alert.alert(
         'Error',
         'Invalid template selected. Please try another template.'
@@ -588,7 +621,9 @@ export default function IntegratedColoringBookApp({
       return;
     }
 
-    console.log('🎯 New template selected:', fileName, 'URI type:', bitmapUri.startsWith('data:') ? 'data URL' : 'file URI');
+    const uriType = bitmapUri.startsWith('data:') ? 'data URL' : 'file URI';
+    const uriLength = bitmapUri.length;
+    showDebugToast(`🎯 Template selected: ${fileName} (${uriType}, ${uriLength} chars)`);
 
     setCurrentTemplate({
       svgData: null,
@@ -677,6 +712,7 @@ export default function IntegratedColoringBookApp({
                     height={(screenWidth - 32) * 0.8}
                     interactionEnabled={selectedTool !== 'move' && !showColorTray}
                     initialDataUrl={canvasSnapshot ?? undefined}
+                    onDebug={showDebugToast}
                   />
                 </Animated.View>
               </GestureDetector>
@@ -915,6 +951,13 @@ export default function IntegratedColoringBookApp({
           }
         }}
         initialCanvasData={canvasSnapshot || undefined}
+      />
+
+      {/* Debug Toast */}
+      <Toast
+        message={toastMessage}
+        visible={showToast}
+        onHide={() => setShowToast(false)}
       />
 
       {/* Color tray modal */}
@@ -2185,5 +2228,37 @@ const styles = StyleSheet.create({
     height: 30
   },
 
+  // Toast styles for debugging
+  toastContainer: {
+    position: 'absolute',
+    top: 100,
+    left: 20,
+    right: 20,
+    zIndex: 9999,
+    alignItems: 'center',
+  },
+  toast: {
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    maxWidth: '90%',
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    flex: 1,
+  },
+  toastClose: {
+    marginLeft: 12,
+    paddingHorizontal: 8,
+  },
+  toastCloseText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
 
 });
