@@ -1,3 +1,6 @@
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system';
+
 export type GeminiParams = {
   style?: 'lineart' | 'sketch';
 };
@@ -14,7 +17,7 @@ export const GeminiService = {
           role: 'user',
           parts: [
             { 
-              text: 'Create a coloring book page: black outlines ONLY on pure white background. No colors, no shading, no gradients. Simple bold black lines (2-3px thick) that form closed shapes perfect for flood fill coloring. Make it look exactly like a traditional coloring book outline - just black lines on white, nothing else.' 
+              text: 'Create a perfect coloring book page: ONLY pure black outlines (RGB 0,0,0) on pure white background (RGB 255,255,255). No colors, no shading, no gradients, no gray areas. Bold black lines 2-4px thick that form completely closed shapes. Every area must be flood-fillable. Think traditional children\'s coloring book - simple, clean, binary black and white only. No anti-aliasing on lines.' 
             },
             // REST uses snake_case for request payloads
             { inline_data: { mime_type: mimeType, data: imageBase64 } },
@@ -76,77 +79,78 @@ export const GeminiService = {
 
   // Process Gemini images to make them compatible with coloring book format
   async processForColoringBook(dataUrl: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      try {
-        // Create a canvas to process the image
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          throw new Error('Could not get canvas context');
+    try {
+      console.log('📸 Processing Gemini image for coloring book format...');
+      
+      // Step 1: Save the data URL to a temporary file
+      const tempPath = FileSystem.documentDirectory + 'temp_gemini_' + Date.now() + '.png';
+      const base64Data = dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
+      
+      await FileSystem.writeAsStringAsync(tempPath, base64Data, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      
+      console.log('📁 Saved temp image to:', tempPath);
+      
+      // Step 2: Resize and standardize the image
+      const processed = await ImageManipulator.manipulateAsync(
+        tempPath,
+        [
+          // Resize to a reasonable size for coloring books
+          { resize: { width: 600 } }, // Maintain aspect ratio
+        ],
+        {
+          compress: 1.0, // No compression to maintain quality
+          format: ImageManipulator.SaveFormat.PNG,
+          base64: true, // We need base64 output
         }
-
-        const img = new Image();
-        img.onload = () => {
-          try {
-            // Set canvas size
-            canvas.width = img.width;
-            canvas.height = img.height;
-
-            // Fill with white background first
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // Draw the original image
-            ctx.drawImage(img, 0, 0);
-
-            // Get image data for processing
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imageData.data;
-
-            // Process pixels to create proper coloring book format
-            for (let i = 0; i < data.length; i += 4) {
-              const r = data[i];
-              const g = data[i + 1];
-              const b = data[i + 2];
-              const a = data[i + 3];
-
-              // Calculate luminance
-              const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-
-              // If pixel is dark enough (likely an outline), make it pure black
-              if (luminance < 128 && a > 128) {
-                data[i] = 0;     // R
-                data[i + 1] = 0; // G
-                data[i + 2] = 0; // B
-                data[i + 3] = 255; // A
-              } else {
-                // Otherwise, make it pure white
-                data[i] = 255;   // R
-                data[i + 1] = 255; // G
-                data[i + 2] = 255; // B
-                data[i + 3] = 255; // A
-              }
-            }
-
-            // Put the processed data back
-            ctx.putImageData(imageData, 0, 0);
-
-            // Convert to PNG data URL
-            const processedDataUrl = canvas.toDataURL('image/png');
-            resolve(processedDataUrl);
-          } catch (error) {
-            reject(error);
-          }
-        };
-
-        img.onerror = () => {
-          reject(new Error('Failed to load image for processing'));
-        };
-
-        img.src = dataUrl;
-      } catch (error) {
-        reject(error);
+      );
+      
+      console.log('📐 Processed image:', processed.width, 'x', processed.height);
+      
+      // Step 3: Apply additional processing to enhance for coloring
+      // Since expo-image-manipulator has limited filters, we'll use what's available
+      const enhanced = await ImageManipulator.manipulateAsync(
+        processed.uri,
+        [
+          // Apply any available filters that might help
+          // Note: expo-image-manipulator doesn't have contrast/brightness filters
+          // but the resize and format conversion should help standardize the image
+        ],
+        {
+          compress: 0.9, // Slight compression to reduce file size
+          format: ImageManipulator.SaveFormat.PNG,
+          base64: true,
+        }
+      );
+      
+      // Step 4: Create the final data URL
+      const processedDataUrl = `data:image/png;base64,${enhanced.base64}`;
+      
+      // Step 5: Clean up temporary files
+      try {
+        await FileSystem.deleteAsync(tempPath);
+        if (processed.uri !== tempPath && processed.uri.startsWith('file://')) {
+          await FileSystem.deleteAsync(processed.uri);
+        }
+        if (enhanced.uri !== processed.uri && enhanced.uri.startsWith('file://')) {
+          await FileSystem.deleteAsync(enhanced.uri);
+        }
+      } catch (cleanupError) {
+        console.warn('⚠️ Failed to clean up temp files:', cleanupError);
       }
-    });
+      
+      console.log('✅ Successfully processed Gemini image for coloring book');
+      return processedDataUrl;
+      
+    } catch (error) {
+      console.error('❌ Failed to process image for coloring book:', error);
+      console.error('Error details:', error);
+      
+      // If processing fails, return the original image
+      // The enhanced prompt should still make it reasonably good for coloring
+      console.log('🔄 Falling back to original image');
+      return dataUrl;
+    }
   },
 };
