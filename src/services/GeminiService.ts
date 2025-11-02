@@ -48,8 +48,19 @@ export const GeminiService = {
       for (const p of parts) {
         const inlineData = p.inlineData || p.inline_data;
         const mt = inlineData?.mimeType || inlineData?.mime_type;
-        const b64 = inlineData?.data;
+        let b64 = inlineData?.data;
         if (inlineData && typeof mt === 'string' && mt.startsWith('image/') && typeof b64 === 'string' && b64.length > 0) {
+          // Clean and validate base64 data from Gemini
+          b64 = b64.replace(/[^A-Za-z0-9+/=]/g, '');
+          while (b64.length % 4 !== 0) {
+            b64 += '=';
+          }
+          
+          if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) {
+            console.warn('⚠️ Invalid base64 from Gemini, skipping this part');
+            continue;
+          }
+          
           const rawDataUrl = `data:${mt};base64,${b64}`;
           
           // Process the image to ensure it's compatible with coloring book format
@@ -65,8 +76,19 @@ export const GeminiService = {
       // Fallback: some responses may place inline_data at the candidate level
       const candInline = (c as any).inlineData || (c as any).inline_data;
       const cmt = candInline?.mimeType || candInline?.mime_type;
-      const cb64 = candInline?.data;
+      let cb64 = candInline?.data;
       if (candInline && typeof cmt === 'string' && cmt.startsWith('image/') && typeof cb64 === 'string' && cb64.length > 0) {
+        // Clean and validate base64 data from Gemini
+        cb64 = cb64.replace(/[^A-Za-z0-9+/=]/g, '');
+        while (cb64.length % 4 !== 0) {
+          cb64 += '=';
+        }
+        
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cb64)) {
+          console.warn('⚠️ Invalid base64 from Gemini candidate, skipping');
+          continue;
+        }
+        
         const rawDataUrl = `data:${cmt};base64,${cb64}`;
         
         // Process the image to ensure it's compatible with coloring book format
@@ -82,9 +104,26 @@ export const GeminiService = {
     try {
       console.log('📸 Processing Gemini image for coloring book format...');
       
-      // Step 1: Save the data URL to a temporary file
+      // Step 1: Clean and validate the base64 data
+      let base64Data = dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
+      
+      // Remove any whitespace and invalid characters
+      base64Data = base64Data.replace(/[^A-Za-z0-9+/=]/g, '');
+      
+      // Ensure proper base64 padding
+      while (base64Data.length % 4 !== 0) {
+        base64Data += '=';
+      }
+      
+      // Validate base64 format
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64Data)) {
+        throw new Error('Invalid base64 format');
+      }
+      
+      console.log('🔍 Base64 data length:', base64Data.length, 'Valid padding:', base64Data.length % 4 === 0);
+      
+      // Step 2: Save the cleaned data URL to a temporary file
       const tempPath = FileSystem.documentDirectory + 'temp_gemini_' + Date.now() + '.png';
-      const base64Data = dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
       
       await FileSystem.writeAsStringAsync(tempPath, base64Data, {
         encoding: FileSystem.EncodingType.Base64,
@@ -124,8 +163,25 @@ export const GeminiService = {
         }
       );
       
-      // Step 4: Create the final data URL
-      const processedDataUrl = `data:image/png;base64,${enhanced.base64}`;
+      // Step 4: Validate and clean the processed base64 data
+      let processedBase64 = enhanced.base64 || '';
+      
+      // Clean the base64 data
+      processedBase64 = processedBase64.replace(/[^A-Za-z0-9+/=]/g, '');
+      
+      // Ensure proper padding
+      while (processedBase64.length % 4 !== 0) {
+        processedBase64 += '=';
+      }
+      
+      // Validate the processed base64
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(processedBase64)) {
+        console.warn('⚠️ Processed base64 is invalid, using original');
+        return dataUrl;
+      }
+      
+      const processedDataUrl = `data:image/png;base64,${processedBase64}`;
+      console.log('🔍 Final base64 length:', processedBase64.length, 'Valid:', processedBase64.length % 4 === 0);
       
       // Step 5: Clean up temporary files
       try {
@@ -147,9 +203,27 @@ export const GeminiService = {
       console.error('❌ Failed to process image for coloring book:', error);
       console.error('Error details:', error);
       
-      // If processing fails, return the original image
-      // The enhanced prompt should still make it reasonably good for coloring
-      console.log('🔄 Falling back to original image');
+      // If processing fails, try to clean the original dataUrl before returning
+      try {
+        let fallbackBase64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
+        fallbackBase64 = fallbackBase64.replace(/[^A-Za-z0-9+/=]/g, '');
+        
+        // Ensure proper padding
+        while (fallbackBase64.length % 4 !== 0) {
+          fallbackBase64 += '=';
+        }
+        
+        if (/^[A-Za-z0-9+/]*={0,2}$/.test(fallbackBase64)) {
+          const mimeMatch = dataUrl.match(/^data:(image\/[^;]+);base64,/);
+          const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+          console.log('🔄 Returning cleaned original image');
+          return `data:${mimeType};base64,${fallbackBase64}`;
+        }
+      } catch (cleanError) {
+        console.error('❌ Failed to clean original image:', cleanError);
+      }
+      
+      console.log('🔄 Falling back to original image as-is');
       return dataUrl;
     }
   },
