@@ -168,6 +168,27 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         }
       }
 
+      // Validate bitmap data before encoding
+      if (!currentBitmap.data || currentBitmap.data.length === 0) {
+        throw new Error('Empty bitmap data for encoding');
+      }
+
+      if (currentBitmap.width <= 0 || currentBitmap.height <= 0) {
+        throw new Error('Invalid bitmap dimensions for encoding');
+      }
+
+      const expectedLength = currentBitmap.width * currentBitmap.height * 4;
+      if (currentBitmap.data.length !== expectedLength) {
+        throw new Error(`Bitmap data length mismatch: expected ${expectedLength}, got ${currentBitmap.data.length}`);
+      }
+
+      // Validate buffer alignment for TypedArray
+      if (currentBitmap.data.buffer.byteLength % 4 !== 0) {
+        // Create a properly aligned buffer
+        const alignedData = new Uint8Array(currentBitmap.data);
+        currentBitmap = { ...currentBitmap, data: alignedData };
+      }
+
       // Convert RGBA pixel buffer to a PNG using upng-js on both web and native
       const pngArrayBuffer = (UPNG as any).encode(
         [currentBitmap.data.buffer],
@@ -175,6 +196,11 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         currentBitmap.height,
         0
       );
+
+      // Validate PNG encoding result
+      if (!pngArrayBuffer || pngArrayBuffer.byteLength === 0) {
+        throw new Error('PNG encoding failed - empty result');
+      }
 
       // Convert ArrayBuffer -> Base64
       const bytes = new Uint8Array(pngArrayBuffer);
@@ -185,13 +211,20 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         binary += String.fromCharCode.apply(null as any, Array.prototype.slice.call(bytes, i, i + chunk));
       }
       const base64Png = btoa(binary);
+
+      // Validate base64 result
+      if (!base64Png || base64Png.length === 0) {
+        throw new Error('Base64 encoding failed');
+      }
+
       const uri = `data:image/png;base64,${base64Png}`;
       setDataUrl((prev) => (prev === uri ? prev : uri));
 
       onDebug?.(`✅ Data URL generated (${uri.length} chars)`);
       if (onCompleteRef.current) onCompleteRef.current(uri);
     } catch (error) {
-      onDebug?.(`❌ Data URL failed: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      onDebug?.(`❌ Data URL failed: ${errorMessage}`);
       console.error('Failed to update data URL:', error);
       // Fallback: simple 1x1 white PNG
       const transparentPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
@@ -268,15 +301,55 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
           throw new Error('Invalid data URL format');
         }
 
-        const binaryString = atob(base64Data);
+        // Validate and clean base64 data before processing
+        let cleanBase64 = base64Data.replace(/[^A-Za-z0-9+/=]/g, '');
+
+        // Ensure proper base64 padding
+        while (cleanBase64.length % 4 !== 0) {
+          cleanBase64 += '=';
+        }
+
+        // Validate base64 format
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cleanBase64)) {
+          throw new Error('Invalid base64 format in data URL');
+        }
+
+        const binaryString = atob(cleanBase64);
+
+        // Validate binary string length
+        if (binaryString.length === 0) {
+          throw new Error('Empty binary data from base64');
+        }
+
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
 
         onDebug?.(`🔍 Decoding PNG (${bytes.length} bytes)`);
+
+        // Validate buffer size before UPNG decode
+        if (bytes.buffer.byteLength === 0) {
+          throw new Error('Empty buffer for PNG decode');
+        }
+
+        // Check if buffer size is reasonable (at least PNG header size)
+        if (bytes.buffer.byteLength < 8) {
+          throw new Error('Buffer too small to be a valid PNG');
+        }
+
         const decoded = UPNG.decode(bytes.buffer);
-        imageData = new Uint8Array(UPNG.toRGBA8(decoded)[0]);
+
+        if (!decoded || decoded.width === 0 || decoded.height === 0) {
+          throw new Error('Invalid PNG decode result');
+        }
+
+        const rgbaFrames = UPNG.toRGBA8(decoded);
+        if (!rgbaFrames || rgbaFrames.length === 0) {
+          throw new Error('Failed to convert PNG to RGBA');
+        }
+
+        imageData = new Uint8Array(rgbaFrames[0]);
         imgWidth = decoded.width;
         imgHeight = decoded.height;
 
@@ -334,14 +407,53 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
           encoding: FileSystem.EncodingType.Base64,
         });
 
-        const binaryString = atob(base64Data);
+        // Validate base64 data before processing
+        let cleanBase64 = base64Data.replace(/[^A-Za-z0-9+/=]/g, '');
+
+        // Ensure proper base64 padding
+        while (cleanBase64.length % 4 !== 0) {
+          cleanBase64 += '=';
+        }
+
+        // Validate base64 format
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cleanBase64)) {
+          throw new Error('Invalid base64 format in file data');
+        }
+
+        const binaryString = atob(cleanBase64);
+
+        // Validate binary string length
+        if (binaryString.length === 0) {
+          throw new Error('Empty binary data from file');
+        }
+
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
 
+        // Validate buffer size before UPNG decode
+        if (bytes.buffer.byteLength === 0) {
+          throw new Error('Empty buffer for PNG decode');
+        }
+
+        // Check if buffer size is reasonable (at least PNG header size)
+        if (bytes.buffer.byteLength < 8) {
+          throw new Error('Buffer too small to be a valid PNG');
+        }
+
         const decoded = UPNG.decode(bytes.buffer);
-        imageData = new Uint8Array(UPNG.toRGBA8(decoded)[0]);
+
+        if (!decoded || decoded.width === 0 || decoded.height === 0) {
+          throw new Error('Invalid PNG decode result from file');
+        }
+
+        const rgbaFrames = UPNG.toRGBA8(decoded);
+        if (!rgbaFrames || rgbaFrames.length === 0) {
+          throw new Error('Failed to convert file PNG to RGBA');
+        }
+
+        imageData = new Uint8Array(rgbaFrames[0]);
         imgWidth = decoded.width;
         imgHeight = decoded.height;
 
@@ -380,7 +492,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       setIsInitialized(true);
       onDebug?.('✅ Template loaded successfully!');
     } catch (error) {
-      onDebug?.(`❌ Load failed: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      onDebug?.(`❌ Load failed: ${errorMessage}`);
       console.error('❌ Failed to load template:', error);
       await createFallbackTemplate();
     }
@@ -890,7 +1003,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
               onDebug?.('🖼️ Image loaded successfully!');
             }}
             onError={(error) => {
-              onDebug?.(`🖼️ Image load error: ${error.nativeEvent?.error || 'Unknown error'}`);
+              const errorMsg = (error as any)?.nativeEvent?.error || 'Unknown error';
+              onDebug?.(`🖼️ Image load error: ${errorMsg}`);
             }}
             onLoadEnd={() => {
               onDebug?.('🖼️ Image load ended');

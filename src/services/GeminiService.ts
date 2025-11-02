@@ -1,5 +1,6 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
+import { decode as atob } from 'base-64';
 
 export type GeminiParams = {
   style?: 'lineart' | 'sketch';
@@ -122,7 +123,36 @@ export const GeminiService = {
       
       console.log('🔍 Base64 data length:', base64Data.length, 'Valid padding:', base64Data.length % 4 === 0);
       
-      // Step 2: Save the cleaned data URL to a temporary file
+      // Step 2: Validate base64 data can be decoded and is a valid image
+      try {
+        // Test decode the full base64 to validate format
+        const testBinary = atob(base64Data);
+        if (testBinary.length === 0) {
+          throw new Error('Base64 decodes to empty data');
+        }
+        
+        // Check PNG signature (first 8 bytes should be PNG header)
+        const pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        if (testBinary.length >= 8) {
+          for (let i = 0; i < 8; i++) {
+            if (testBinary.charCodeAt(i) !== pngSignature[i]) {
+              console.warn('⚠️ Data does not appear to be a valid PNG, but proceeding anyway');
+              break;
+            }
+          }
+        }
+        
+        // Ensure the binary data length is reasonable
+        if (testBinary.length < 100) {
+          throw new Error('Decoded data too small to be a valid image');
+        }
+        
+      } catch (decodeError) {
+        const errorMessage = decodeError instanceof Error ? decodeError.message : String(decodeError);
+        throw new Error(`Base64 validation failed: ${errorMessage}`);
+      }
+      
+      // Step 3: Save the cleaned data URL to a temporary file
       const tempPath = FileSystem.documentDirectory + 'temp_gemini_' + Date.now() + '.png';
       
       await FileSystem.writeAsStringAsync(tempPath, base64Data, {
@@ -131,7 +161,7 @@ export const GeminiService = {
       
       console.log('📁 Saved temp image to:', tempPath);
       
-      // Step 2: Resize and standardize the image
+      // Step 4: Resize and standardize the image
       const processed = await ImageManipulator.manipulateAsync(
         tempPath,
         [
@@ -147,7 +177,7 @@ export const GeminiService = {
       
       console.log('📐 Processed image:', processed.width, 'x', processed.height);
       
-      // Step 3: Apply additional processing to enhance for coloring
+      // Step 5: Apply additional processing to enhance for coloring
       // Since expo-image-manipulator has limited filters, we'll use what's available
       const enhanced = await ImageManipulator.manipulateAsync(
         processed.uri,
@@ -163,7 +193,7 @@ export const GeminiService = {
         }
       );
       
-      // Step 4: Validate and clean the processed base64 data
+      // Step 6: Validate and clean the processed base64 data
       let processedBase64 = enhanced.base64 || '';
       
       // Clean the base64 data
@@ -183,7 +213,7 @@ export const GeminiService = {
       const processedDataUrl = `data:image/png;base64,${processedBase64}`;
       console.log('🔍 Final base64 length:', processedBase64.length, 'Valid:', processedBase64.length % 4 === 0);
       
-      // Step 5: Clean up temporary files
+      // Step 7: Clean up temporary files
       try {
         await FileSystem.deleteAsync(tempPath);
         if (processed.uri !== tempPath && processed.uri.startsWith('file://')) {
