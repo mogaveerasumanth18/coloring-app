@@ -48,15 +48,15 @@ const DEFAULT_CANVAS_SIZE = Math.min(SCREEN_WIDTH - 40, 400);
 
 // Fit an image of size (iw, ih) into a box (bw, bh) preserving aspect ratio
 function fitIntoBox(iw: number, ih: number, bw: number, bh: number) {
-  if (!bw || !bh) return { width: iw, height: ih };
+  if (!bw || !bh) return { width: Math.round(iw), height: Math.round(ih) };
   const arImg = iw / ih;
   const arBox = bw / bh;
   if (arImg > arBox) {
-    const width = bw;
+    const width = Math.round(bw);
     const height = Math.round(bw / arImg);
     return { width, height };
   }
-  const height = bh;
+  const height = Math.round(bh);
   const width = Math.round(bh * arImg);
   return { width, height };
 }
@@ -69,6 +69,12 @@ function resampleNearest(
   dw: number,
   dh: number
 ): Uint8Array {
+  // Ensure all dimensions are integers
+  sw = Math.round(sw);
+  sh = Math.round(sh);
+  dw = Math.round(dw);
+  dh = Math.round(dh);
+
   if (sw === dw && sh === dh) return new Uint8Array(src);
   const dst = new Uint8Array(dw * dh * 4);
   const xRatio = sw / dw;
@@ -135,8 +141,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
   const cloneBitmap = useCallback((bmp: ColoringBitmap): ColoringBitmap => {
     return {
-      width: bmp.width,
-      height: bmp.height,
+      width: Math.round(bmp.width),
+      height: Math.round(bmp.height),
       data: new Uint8Array(bmp.data),
     };
   }, []);
@@ -173,11 +179,21 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         throw new Error('Empty bitmap data for encoding');
       }
 
-      if (currentBitmap.width <= 0 || currentBitmap.height <= 0) {
+      // Ensure dimensions are integers
+      const width = Math.round(currentBitmap.width);
+      const height = Math.round(currentBitmap.height);
+
+      if (width <= 0 || height <= 0) {
         throw new Error('Invalid bitmap dimensions for encoding');
       }
 
-      const expectedLength = currentBitmap.width * currentBitmap.height * 4;
+      // Check if dimensions were modified and update bitmap if needed
+      if (width !== currentBitmap.width || height !== currentBitmap.height) {
+        onDebug?.(`🔧 Correcting bitmap dimensions from ${currentBitmap.width}x${currentBitmap.height} to ${width}x${height}`);
+        currentBitmap = { ...currentBitmap, width, height };
+      }
+
+      const expectedLength = width * height * 4;
       if (currentBitmap.data.length !== expectedLength) {
         throw new Error(`Bitmap data length mismatch: expected ${expectedLength}, got ${currentBitmap.data.length}`);
       }
@@ -192,8 +208,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       // Convert RGBA pixel buffer to a PNG using upng-js on both web and native
       const pngArrayBuffer = (UPNG as any).encode(
         [currentBitmap.data.buffer],
-        currentBitmap.width,
-        currentBitmap.height,
+        width,
+        height,
         0
       );
 
@@ -467,14 +483,18 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
       onDebug?.(`📏 Fitted to: ${fitted.width}x${fitted.height}`);
 
+      // Ensure dimensions are integers
+      const finalWidth = Math.round(fitted.width);
+      const finalHeight = Math.round(fitted.height);
+
       const newBitmap: ColoringBitmap =
-        (imgWidth !== fitted.width || imgHeight !== fitted.height)
-          ? { width: fitted.width, height: fitted.height, data: resampleNearest(imageData, imgWidth, imgHeight, fitted.width, fitted.height) }
-          : { width: imgWidth, height: imgHeight, data: imageData };
+        (imgWidth !== finalWidth || imgHeight !== finalHeight)
+          ? { width: finalWidth, height: finalHeight, data: resampleNearest(imageData, imgWidth, imgHeight, finalWidth, finalHeight) }
+          : { width: Math.round(imgWidth), height: Math.round(imgHeight), data: imageData };
 
       setBitmap(newBitmap);
       setOriginalTemplate(cloneBitmap(newBitmap));
-      setCanvasSize({ width: fitted.width, height: fitted.height });
+      setCanvasSize({ width: finalWidth, height: finalHeight });
 
       // Build robust masks from the loaded template and allocate reusable work buffers
       boundaryMaskRef.current = computeBoundaryMask(newBitmap);
@@ -544,7 +564,9 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     setOriginalTemplate(cloneBitmap(fallbackBitmap)); // Store original template for eraser
     // Use provided dimensions for fullscreen mode
     const fitted = fitIntoBox(templateWidth, templateHeight, viewBoxW, viewBoxH);
-    setCanvasSize({ width: fitted.width, height: fitted.height });
+    const finalWidth = Math.round(fitted.width);
+    const finalHeight = Math.round(fitted.height);
+    setCanvasSize({ width: finalWidth, height: finalHeight });
     // Build boundary masks for fallback as well
     boundaryMaskRef.current = computeBoundaryMask(fallbackBitmap);
     strongBoundaryMaskRef.current = computeStrongBoundaryMask(fallbackBitmap);
