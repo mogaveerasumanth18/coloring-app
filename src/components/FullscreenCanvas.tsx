@@ -197,8 +197,6 @@ export default function FullscreenCanvas({
   initialCanvasData,
 }: FullscreenCanvasProps) {
   const insets = useSafeAreaInsets();
-  const [internalVisible, setInternalVisible] = useState(isVisible);
-  const [isTransitioning, setIsTransitioning] = useState(false);
   const [colors] = useState([
     '#06b6d4', '#22d3ee', '#0ea5e9', '#3b82f6', '#60a5fa', '#2563eb',
     '#7c3aed', '#8b5cf6', '#a78bfa', '#db2777', '#ec4899', '#f472b6',
@@ -423,32 +421,6 @@ export default function FullscreenCanvas({
   }, [currentTool, currentColor, currentBrushSize, templateUri]);
 
 
-  // Handle visibility state changes with transition management
-  useEffect(() => {
-    if (isVisible !== internalVisible) {
-      if (isVisible) {
-        // Entering fullscreen
-        setIsTransitioning(true);
-        setInternalVisible(true);
-        // Allow time for modal to appear
-        setTimeout(() => setIsTransitioning(false), 200);
-      } else {
-        // Exiting fullscreen
-        setIsTransitioning(true);
-        // Small delay before hiding to allow smooth transition
-        setTimeout(() => {
-          setInternalVisible(false);
-          setIsTransitioning(false);
-        }, 100);
-      }
-    }
-  }, [isVisible, internalVisible]);
-
-  // Function to handle tool interactions (no auto-hide functionality)
-  const handleToolInteraction = () => {
-    // UI is always visible, no need to manage visibility
-  };
-
   // Ensure native canvas updates brush width instantly even if it caches the value internally
   useEffect(() => {
     if (Platform.OS !== 'web') {
@@ -604,7 +576,7 @@ export default function FullscreenCanvas({
 
   return (
     <Modal
-      visible={internalVisible}
+      visible={isVisible}
       transparent={false}
       animationType="slide"
       presentationStyle="fullScreen"

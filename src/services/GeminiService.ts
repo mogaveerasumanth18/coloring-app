@@ -9,29 +9,27 @@ export type GeminiParams = {
 // Note: We won’t ship a server secret; users provide their own key.
 export const GeminiService = {
   async generateLineArt(imageBase64: string, apiKey: string, mimeType: string = 'image/jpeg', _params?: GeminiParams): Promise<string> {
-    // Use Gemini 2.0 Flash (banana) model with native image generation
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${encodeURIComponent(apiKey)}`;
+    // Use a modern multimodal model like Gemini 1.5 Flash for image generation.
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${encodeURIComponent(apiKey)}`;
     const req: any = {
-      // Enhanced prompt to ensure proper coloring book format
+      // Enhanced prompt to ensure proper coloring book format from an input image.
       contents: [
         {
           parts: [
-            { 
-              text: 'Create a SIMPLE coloring book page: Draw ONLY thick black outlines (4-6px wide) on pure white background. Make 3-5 LARGE, SIMPLE shapes with COMPLETELY CLOSED boundaries. Each shape must be: 1) Big enough to easily color inside, 2) Have thick continuous black borders with NO gaps or breaks, 3) Be separate from other shapes. Examples: large flower with 5 simple petals, basic butterfly, simple house, big star, circle with simple pattern inside. AVOID: tiny details, thin lines, complex patterns, overlapping shapes, or anything with small enclosed areas. Every area must be flood-fill friendly. Use ONLY pure black lines (RGB 0,0,0) on pure white background (RGB 255,255,255).' 
+            {
+              text: 'Convert the provided image into a SIMPLE coloring book page. Draw ONLY thick black outlines (4-6px wide) on a pure white background. The output should have COMPLETELY CLOSED boundaries for all shapes, making them flood-fill friendly. Simplify the details from the original image into large, easy-to-color shapes. AVOID: tiny details, thin lines, complex patterns, and overlapping shapes. Use ONLY pure black lines (RGB 0,0,0) on a pure white background (RGB 255,255,255).',
             },
             // REST uses snake_case for request payloads
             { inline_data: { mime_type: mimeType, data: imageBase64 } },
           ],
         },
       ],
-      // Gemini 2.0 Flash supports multimodal output including images
+      // Gemini 1.5 Flash supports multimodal output.
       generationConfig: {
         temperature: 1.0,
         topP: 0.95,
         topK: 40,
         maxOutputTokens: 8192,
-        responseMimeType: "text/plain",
-        responseModalities: ["IMAGE"],
       },
     };
     const res = await fetch(url, {

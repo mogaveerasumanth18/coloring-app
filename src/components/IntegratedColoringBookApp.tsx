@@ -498,134 +498,63 @@ export default function IntegratedColoringBookApp({
   };
 
   const handleExpandFullscreen = async () => {
-    if (isTransitioning) return; // Prevent multiple rapid transitions
+    if (isTransitioning) return;
 
-    // First, try to capture current canvas state if available
-    let currentCanvasData: string | null = null;
-
-    // Check if we have a canvas and try to get its current data
-    if (bitmapCanvasRef.current && typeof bitmapCanvasRef.current.getCurrentDataUrl === 'function') {
-      try {
-        currentCanvasData = bitmapCanvasRef.current.getCurrentDataUrl();
-        console.log('Captured current canvas state for fullscreen');
-      } catch (error) {
-        console.warn('Could not capture canvas state:', error);
-      }
-    }
-
-    // Use current canvas data if available, otherwise fall back to stored snapshot
-    const dataToUse = currentCanvasData || canvasSnapshot;
-
-    // If we have existing progress, check if it's different from original template
-    const hasProgress = dataToUse && dataToUse !== currentTemplate?.bitmapUri && dataToUse.length > 100; // Basic check for actual data
-
-    if (hasProgress && !isFullscreen) {
-      Alert.alert(
-        'Switch to Fullscreen',
-        'Your current progress will be preserved when switching to fullscreen mode. Continue?',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-          {
-            text: 'Continue',
-            onPress: () => proceedToFullscreen(dataToUse),
-          },
-        ]
-      );
+    // If we are already in fullscreen, we should exit.
+    if (isFullscreen) {
+      handleFullscreenClose();
       return;
     }
 
-    // If no significant progress, proceed directly
-    proceedToFullscreen(dataToUse);
-  };
-
-  const proceedToFullscreen = async (canvasData: string | null) => {
-    if (isTransitioning) return;
-
+    // --- Enter Fullscreen ---
     setIsTransitioning(true);
-
     try {
-      // Update the canvas data to pass to fullscreen
-      setCanvasSnapshot(canvasData);
+      // Capture canvas state before entering fullscreen
+      let currentCanvasData: string | null = null;
+      if (bitmapCanvasRef.current && typeof bitmapCanvasRef.current.getCurrentDataUrl === 'function') {
+        try {
+          currentCanvasData = bitmapCanvasRef.current.getCurrentDataUrl();
+        } catch (error) {
+          console.warn('Could not capture canvas state:', error);
+        }
+      }
+      setCanvasSnapshot(currentCanvasData || canvasSnapshot);
 
       if (Platform.OS === 'web') {
         toggleFullscreenWeb();
-        setIsTransitioning(false);
       } else {
-        // For React Native (mobile devices)
-        if (!isFullscreen) {
-          // Enter fullscreen mode - switch to landscape
-          console.log('Entering fullscreen mode...');
-          setIsFullscreen(true); // Set state first for smooth transition
-
-          // Small delay to allow UI to update before orientation change
-          setTimeout(async () => {
-            try {
-              await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-              console.log('Successfully locked to landscape');
-            } catch (error) {
-              console.error('Failed to lock landscape orientation:', error);
-              // Revert state if orientation lock failed
-              setIsFullscreen(false);
-              Alert.alert('Orientation Error', 'Failed to change screen orientation');
-            }
-            setIsTransitioning(false);
-          }, 100);
-        } else {
-          // Exit fullscreen mode - switch back to portrait
-          console.log('Exiting fullscreen mode...');
-          setIsFullscreen(false); // Set state first for smooth transition
-
-          // Small delay to allow UI to update before orientation change
-          setTimeout(async () => {
-            try {
-              await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-              console.log('Successfully locked to portrait');
-            } catch (error) {
-              console.error('Failed to lock portrait orientation:', error);
-              // Revert state if orientation lock failed
-              setIsFullscreen(true);
-              Alert.alert('Orientation Error', 'Failed to change screen orientation');
-            }
-            setIsTransitioning(false);
-          }, 100);
-        }
+        // Set state and then lock orientation
+        setIsFullscreen(true);
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
       }
     } catch (error) {
-      console.error('Error in proceedToFullscreen:', error);
+      console.error('Error entering fullscreen:', error);
+      setIsFullscreen(false); // Revert on error
+    } finally {
       setIsTransitioning(false);
     }
   };
 
-  // Handle fullscreen exit from the fullscreen component
+  // This function is called by the fullscreen canvas close button, or by handleExpandFullscreen
   const handleFullscreenClose = async () => {
     if (isTransitioning) return;
 
     setIsTransitioning(true);
-
     try {
       if (Platform.OS === 'web') {
+        if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
+          toggleFullscreenWeb();
+        }
         setIsFullscreen(false);
-        setIsTransitioning(false);
       } else {
-        // Set state first for smooth transition
+        // Set state and then lock orientation
         setIsFullscreen(false);
-
-        // Small delay before orientation change
-        setTimeout(async () => {
-          try {
-            await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-            console.log('Successfully returned to portrait from fullscreen');
-          } catch (error) {
-            console.error('Failed to return to portrait:', error);
-          }
-          setIsTransitioning(false);
-        }, 100);
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
       }
     } catch (error) {
       console.error('Error closing fullscreen:', error);
+      setIsFullscreen(true); // Revert on error
+    } finally {
       setIsTransitioning(false);
     }
   };
