@@ -32,12 +32,14 @@ interface ImageUploaderEnhancedProps {
   onBitmapTemplateSelected: (imageUri: string, fileName: string) => void;
   onImageUploaded: (imageUri: string, fileName: string) => void;
   onTemplateSelected: (templateData: any) => void;
+  onDebug?: (message: string) => void;
 }
 
 export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
   onBitmapTemplateSelected,
   onImageUploaded,
   onTemplateSelected,
+  onDebug,
 }) => {
   const [templates, setTemplates] = useState<PngTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,8 +90,8 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
 
   useEffect(() => {
     console.log('🚀 ImageUploaderEnhanced: PNG mode enabled!');
-  loadTemplates();
-  setUserTemplates(UserTemplatesService.list());
+    loadTemplates();
+    setUserTemplates(UserTemplatesService.list());
   }, []);
 
   const loadTemplates = async () => {
@@ -153,15 +155,15 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
       const asset = (picked as any).assets ? (picked as any).assets[0] : picked;
       const base64 = asset.base64 as string | undefined;
       const uri = asset.uri as string;
-  const imgB64 = base64 ?? await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-  // Infer MIME type from file path/extension (default jpeg)
-  let mimeType = 'image/jpeg';
-  const lower = uri.toLowerCase();
-  if (lower.endsWith('.png')) mimeType = 'image/png';
-  else if (lower.endsWith('.webp')) mimeType = 'image/webp';
-  else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mimeType = 'image/jpeg';
-  // Call Gemini to generate line art
-  const outDataUrl = await GeminiService.generateLineArt(imgB64, key!, mimeType);
+      const imgB64 = base64 ?? await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      // Infer MIME type from file path/extension (default jpeg)
+      let mimeType = 'image/jpeg';
+      const lower = uri.toLowerCase();
+      if (lower.endsWith('.png')) mimeType = 'image/png';
+      else if (lower.endsWith('.webp')) mimeType = 'image/webp';
+      else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mimeType = 'image/jpeg';
+      // Call Gemini to generate line art
+      const outDataUrl = await GeminiService.generateLineArt(imgB64, key!, mimeType);
       setGenResult(outDataUrl);
       setSaveTitle('My Line Art');
       setSaveCategory('custom');
@@ -169,6 +171,13 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
     } catch (e: any) {
       console.warn('Upload failed', e);
       const msg: string = e?.message || '';
+
+      // Log to debug toast
+      if (onDebug) {
+        onDebug(`❌ Gemini API Error: ${msg}`);
+        onDebug(`Error details: ${JSON.stringify(e, null, 2)}`);
+      }
+
       const isAuth = /permission|unauthoriz|invalid|access\s?denied|api\s?key|key\s?invalid/i.test(msg);
       const isQuota = /quota|limit|exceed|rate|billing/i.test(msg);
       if (isAuth || isQuota) {
@@ -250,7 +259,7 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
 
   return (
     <View style={styles.container}>
-  {/* Gemini-powered upload flow. */}
+      {/* Gemini-powered upload flow. */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>🎨 Choose Your PNG Template!</Text>
         <Text style={styles.headerSubtitle}>
@@ -316,7 +325,7 @@ export const ImageUploaderEnhanced: React.FC<ImageUploaderEnhancedProps> = ({
         <View style={styles.templatesGrid}>
           {/* User templates */}
           {filteredUserTemplates.map((tpl) => (
-            <View key={tpl.id} style={[styles.templateCard, { width: cardWidth, marginHorizontal: cardMargin }] }>
+            <View key={tpl.id} style={[styles.templateCard, { width: cardWidth, marginHorizontal: cardMargin }]}>
               <View style={[styles.templateImageContainer, { height: Math.round(cardWidth * 0.66) }]}>
                 <Image source={{ uri: tpl.pngUri }} style={styles.templateImage} resizeMode="cover" />
               </View>
@@ -591,16 +600,16 @@ const styles = StyleSheet.create({
   templatesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-  paddingHorizontal: 8,
+    paddingHorizontal: 8,
     paddingVertical: 16,
     justifyContent: 'center',
   },
   templateCard: {
-  width: (screenWidth - 60) / 2,
+    width: (screenWidth - 60) / 2,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     marginBottom: 20,
-  marginHorizontal: 8,
+    marginHorizontal: 8,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: {

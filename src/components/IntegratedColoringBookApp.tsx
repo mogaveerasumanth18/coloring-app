@@ -936,6 +936,7 @@ export default function IntegratedColoringBookApp({
                 templateData.fileName
               );
           }}
+          onDebug={addDebugMessage}
         />
       </View>
     </ScrollView>

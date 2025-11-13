@@ -9,26 +9,29 @@ export type GeminiParams = {
 // Note: We won’t ship a server secret; users provide their own key.
 export const GeminiService = {
   async generateLineArt(imageBase64: string, apiKey: string, mimeType: string = 'image/jpeg', _params?: GeminiParams): Promise<string> {
-    // Use Generative Language API v1beta with the experimental 2.0 flash model, per reference.
+    // Use Gemini 2.0 Flash (banana) model with native image generation
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${encodeURIComponent(apiKey)}`;
     const req: any = {
       // Enhanced prompt to ensure proper coloring book format
       contents: [
         {
-          role: 'user',
           parts: [
             { 
-              text: 'Create a perfect coloring book page: ONLY pure black outlines (RGB 0,0,0) on pure white background (RGB 255,255,255). No colors, no shading, no gradients, no gray areas. Bold black lines 2-4px thick that form completely closed shapes. Every area must be flood-fillable. Think traditional children\'s coloring book - simple, clean, binary black and white only. No anti-aliasing on lines.' 
+              text: 'Create a SIMPLE coloring book page: Draw ONLY thick black outlines (4-6px wide) on pure white background. Make 3-5 LARGE, SIMPLE shapes with COMPLETELY CLOSED boundaries. Each shape must be: 1) Big enough to easily color inside, 2) Have thick continuous black borders with NO gaps or breaks, 3) Be separate from other shapes. Examples: large flower with 5 simple petals, basic butterfly, simple house, big star, circle with simple pattern inside. AVOID: tiny details, thin lines, complex patterns, overlapping shapes, or anything with small enclosed areas. Every area must be flood-fill friendly. Use ONLY pure black lines (RGB 0,0,0) on pure white background (RGB 255,255,255).' 
             },
             // REST uses snake_case for request payloads
             { inline_data: { mime_type: mimeType, data: imageBase64 } },
           ],
         },
       ],
-      // Request both text and image modalities (aligning with the SDK config in the reference)
+      // Gemini 2.0 Flash supports multimodal output including images
       generationConfig: {
-        candidateCount: 1,
-        responseModalities: ['TEXT', 'IMAGE'],
+        temperature: 1.0,
+        topP: 0.95,
+        topK: 40,
+        maxOutputTokens: 8192,
+        responseMimeType: "text/plain",
+        responseModalities: ["IMAGE"],
       },
     };
     const res = await fetch(url, {
@@ -38,9 +41,15 @@ export const GeminiService = {
     });
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(`Gemini error ${res.status}: ${txt}`);
+      console.error('❌ Gemini API Error:', {
+        status: res.status,
+        statusText: res.statusText,
+        response: txt,
+      });
+      throw new Error(`Gemini API error (${res.status}): ${txt}`);
     }
     const data = await res.json();
+    console.log('✅ Gemini API Response:', JSON.stringify(data, null, 2));
     
     // Find an image either in inlineData (SDK-style) or inline_data (REST-style)
     const candidates = data?.candidates || [];
@@ -103,8 +112,6 @@ export const GeminiService = {
   // Process Gemini images to make them compatible with coloring book format
   async processForColoringBook(dataUrl: string): Promise<string> {
     try {
-      console.log('📸 Processing Gemini image for coloring book format...');
-      
       // Step 1: Clean and validate the base64 data
       let base64Data = dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
       
@@ -120,8 +127,6 @@ export const GeminiService = {
       if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64Data)) {
         throw new Error('Invalid base64 format');
       }
-      
-      console.log('🔍 Base64 data length:', base64Data.length, 'Valid padding:', base64Data.length % 4 === 0);
       
       // Step 2: Validate base64 data can be decoded and is a valid image
       try {
@@ -159,8 +164,6 @@ export const GeminiService = {
         encoding: FileSystem.EncodingType.Base64,
       });
       
-      console.log('📁 Saved temp image to:', tempPath);
-      
       // Step 4: Resize and standardize the image
       const processed = await ImageManipulator.manipulateAsync(
         tempPath,
@@ -174,8 +177,6 @@ export const GeminiService = {
           base64: true, // We need base64 output
         }
       );
-      
-      console.log('📐 Processed image:', processed.width, 'x', processed.height);
       
       // Step 5: Apply additional processing to enhance for coloring
       // Since expo-image-manipulator has limited filters, we'll use what's available
@@ -211,7 +212,6 @@ export const GeminiService = {
       }
       
       const processedDataUrl = `data:image/png;base64,${processedBase64}`;
-      console.log('🔍 Final base64 length:', processedBase64.length, 'Valid:', processedBase64.length % 4 === 0);
       
       // Step 7: Clean up temporary files
       try {
@@ -226,12 +226,10 @@ export const GeminiService = {
         console.warn('⚠️ Failed to clean up temp files:', cleanupError);
       }
       
-      console.log('✅ Successfully processed Gemini image for coloring book');
       return processedDataUrl;
       
     } catch (error) {
-      console.error('❌ Failed to process image for coloring book:', error);
-      console.error('Error details:', error);
+      console.error('Failed to process image for coloring book:', error);
       
       // If processing fails, try to clean the original dataUrl before returning
       try {
@@ -246,14 +244,12 @@ export const GeminiService = {
         if (/^[A-Za-z0-9+/]*={0,2}$/.test(fallbackBase64)) {
           const mimeMatch = dataUrl.match(/^data:(image\/[^;]+);base64,/);
           const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
-          console.log('🔄 Returning cleaned original image');
           return `data:${mimeType};base64,${fallbackBase64}`;
         }
       } catch (cleanError) {
-        console.error('❌ Failed to clean original image:', cleanError);
+        console.error('Failed to clean original image:', cleanError);
       }
       
-      console.log('🔄 Falling back to original image as-is');
       return dataUrl;
     }
   },
