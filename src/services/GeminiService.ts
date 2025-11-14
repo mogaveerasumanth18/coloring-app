@@ -24,12 +24,13 @@ export const GeminiService = {
           ],
         },
       ],
-      // Gemini 1.5 Flash supports multimodal output.
+      // Gemini 2.0 Flash Preview requires response_modalities for image generation.
       generationConfig: {
         temperature: 1.0,
         topP: 0.95,
         topK: 40,
         maxOutputTokens: 8192,
+        response_modalities: ['TEXT', 'IMAGE'],
       },
     };
     const res = await fetch(url, {
