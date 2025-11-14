@@ -281,7 +281,7 @@ export default function FullscreenCanvas({
       }
     });
 
-  // Revamped pan gesture for proper move functionality
+  // Pan gesture - only active in Move mode
   const panGesture = Gesture.Pan()
     .minPointers(1)
     .maxPointers(1)
@@ -294,21 +294,17 @@ export default function FullscreenCanvas({
     })
     .onUpdate((event) => {
       'worklet';
-      if (currentTool === 'move') {
-        translateX.value = savedTranslateX.value + event.translationX;
-        translateY.value = savedTranslateY.value + event.translationY;
-      }
+      translateX.value = savedTranslateX.value + event.translationX;
+      translateY.value = savedTranslateY.value + event.translationY;
     })
     .onEnd(() => {
       'worklet';
-      // Calculate proper boundaries based on actual canvas size and zoom
-      const canvasWidth = canvasWidthSV.value - 32; // Account for padding
-      const canvasHeight = canvasHeightSV.value - 100; // Account for UI elements
+      const canvasWidth = canvasWidthSV.value - 32;
+      const canvasHeight = canvasHeightSV.value - 100;
 
       const scaledWidth = canvasWidth * scale.value;
       const scaledHeight = canvasHeight * scale.value;
 
-      // Only constrain if zoomed in (scale > 1)
       if (scale.value > 1) {
         const maxTranslateX = (scaledWidth - canvasWidth) / 2;
         const maxTranslateY = (scaledHeight - canvasHeight) / 2;
@@ -322,7 +318,6 @@ export default function FullscreenCanvas({
           { damping: 20, stiffness: 200 }
         );
       } else {
-        // Reset to center when not zoomed
         translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
         translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
       }
@@ -331,11 +326,11 @@ export default function FullscreenCanvas({
       savedTranslateY.value = translateY.value;
     });
 
-  // Additional pan gesture for two-finger panning when zoomed (regardless of tool)
+  // Two-finger pan - always available for navigation when zoomed
   const twoFingerPanGesture = Gesture.Pan()
     .minPointers(2)
     .maxPointers(2)
-    .enabled(currentTool === 'move' && scale.value > 1)
+    .enabled(true) // Always enabled for two-finger navigation
     .onStart(() => {
       'worklet';
       savedTranslateX.value = translateX.value;
@@ -372,10 +367,11 @@ export default function FullscreenCanvas({
       savedTranslateY.value = translateY.value;
     });
 
-  // Combine gestures: pinch, one-finger pan (move tool), and two-finger pan (zoom)
-  const composedGesture = Gesture.Simultaneous(
+  // Combine gestures properly - pinch always available, pan only in move mode
+  const composedGesture = Gesture.Race(
     pinchGesture,
-    Gesture.Race(panGesture, twoFingerPanGesture)
+    twoFingerPanGesture,
+    panGesture
   );
 
   // Animated style for canvas transform
@@ -821,16 +817,16 @@ export default function FullscreenCanvas({
                       <Text style={styles.emptyCanvasText}>Loading image…</Text>
                     </View>
                   ) : (
-                    <GestureDetector gesture={composedGesture}>
+                    <GestureDetector gesture={currentTool === 'move' ? composedGesture : Gesture.Manual()}>
                       <Reanimated.View
                         style={[
                           {
                             width: computeFit(canvasSize, templateSize).width,
                             height: computeFit(canvasSize, templateSize).height,
                           },
-                          animatedCanvasStyle,
+                          currentTool === 'move' ? animatedCanvasStyle : {},
                         ]}
-                        pointerEvents="auto"
+                        pointerEvents={currentTool === 'move' ? 'auto' : 'box-none'}
                       >
                         {Platform.OS === 'web' ? (
                           <View
@@ -848,6 +844,7 @@ export default function FullscreenCanvas({
                               templateUri={templateUri}
                               width={computeFit(canvasSize, templateSize).width}
                               height={computeFit(canvasSize, templateSize).height}
+                              interactionEnabled={currentTool !== 'move'}
                             />
                           </View>
                         ) : (

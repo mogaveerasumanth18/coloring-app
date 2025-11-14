@@ -898,18 +898,9 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       }
       lastPointRef.current = { x: bitmapX, y: bitmapY };
 
-      const newBitmap: ColoringBitmap = { width: bitmap.width, height: bitmap.height, data: newData };
-      // Do not setBitmap on every move; we only update the preview (dataUrl) below
-      // Reduce live update frequency during drawing to prevent flash
-      if (encodeDebounceRef.current) clearTimeout(encodeDebounceRef.current);
-      encodeDebounceRef.current = setTimeout(() => {
-        if (encodeInFlightRef.current) return;
-        encodeInFlightRef.current = true;
-        updateDataUrl(newBitmap).finally(() => {
-          encodeInFlightRef.current = false;
-        });
-      }, 200); // Increased debounce time to reduce flashing
-      // Keep final high-quality encode to stroke end
+      // Don't update bitmap or dataUrl during stroke - only update the working buffer
+      // The SVG preview path provides instant visual feedback
+      // Final commit happens in onPanResponderRelease for better performance
     } catch (error) {
       console.error('❌ Error during brush stroke:', error);
     }
@@ -918,8 +909,13 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => isInitialized && interactionEnabled,
     onMoveShouldSetPanResponder: () => isInitialized && interactionEnabled && (selectedTool === 'brush' || selectedTool === 'eraser'),
+    // Prevent gesture conflicts by claiming responder immediately for drawing tools
+    onPanResponderTerminationRequest: () => false,
+    onShouldBlockNativeResponder: () => true,
 
     onPanResponderGrant: (evt) => {
+      if (!interactionEnabled) return;
+
       const { locationX, locationY } = evt.nativeEvent;
 
       if (selectedTool === 'bucket') {
@@ -943,13 +939,16 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     },
 
     onPanResponderMove: (evt) => {
+      if (!interactionEnabled) return;
+
       if (selectedTool === 'brush' || selectedTool === 'eraser') {
         const { locationX, locationY } = evt.nativeEvent;
-        // Extend live preview
+        // Extend live preview - throttle updates for performance
         setStrokePoints((pts) => {
           if (pts.length === 0) return [{ x: locationX, y: locationY }];
           const last = pts[pts.length - 1];
-          if (Math.abs(last.x - locationX) + Math.abs(last.y - locationY) < 0.3) return pts;
+          // Increase threshold to reduce state updates
+          if (Math.abs(last.x - locationX) + Math.abs(last.y - locationY) < 2) return pts;
           return [...pts, { x: locationX, y: locationY }];
         });
         performBrushStroke(locationX, locationY);
@@ -957,7 +956,15 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     },
 
     onPanResponderRelease: async () => {
+      if (!interactionEnabled) return;
+
       if (bitmap && (selectedTool === 'brush' || selectedTool === 'eraser')) {
+        // Cancel any pending debounced encodes
+        if (encodeDebounceRef.current) {
+          clearTimeout(encodeDebounceRef.current);
+          encodeDebounceRef.current = null;
+        }
+
         // Commit working buffer to bitmap once
         if (workingDataRef.current) {
           const committed: ColoringBitmap = { width: bitmap.width, height: bitmap.height, data: workingDataRef.current };
@@ -975,6 +982,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
             }
           }
           setBitmap(committed);
+          // Final encode after stroke completion
+          encodeInFlightRef.current = false;
           await updateDataUrl(committed);
           saveToHistory(committed);
         } else {
@@ -985,8 +994,18 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         lastPointRef.current = null;
         // Keep preview visible until the new image has loaded; then fade it out
         waitingForImageLoadRef.current = true;
-        // final encode was handled above
       }
+    },
+
+    onPanResponderTerminate: () => {
+      // Handle gesture interruption
+      if (encodeDebounceRef.current) {
+        clearTimeout(encodeDebounceRef.current);
+        encodeDebounceRef.current = null;
+      }
+      workingDataRef.current = null;
+      lastPointRef.current = null;
+      setStrokePoints([]);
     },
   });
 
@@ -1003,10 +1022,10 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   }, [templateUri, initialDataUrl]);
 
   return (
-    <View style={styles.container} pointerEvents={interactionEnabled ? 'auto' : 'none'}>
+    <View style={styles.container} pointerEvents={interactionEnabled ? 'auto' : 'box-none'}>
       <View
         style={[styles.canvasContainer, { width: canvasSize.width, height: canvasSize.height }]}
-        {...panResponder.panHandlers}
+        {...(interactionEnabled ? panResponder.panHandlers : {})}
       >
         {dataUrl ? (
           <Image
