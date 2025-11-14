@@ -9,8 +9,8 @@ export type GeminiParams = {
 // Note: We won’t ship a server secret; users provide their own key.
 export const GeminiService = {
   async generateLineArt(imageBase64: string, apiKey: string, mimeType: string = 'image/jpeg', _params?: GeminiParams): Promise<string> {
-    // Use a modern multimodal model like Gemini 1.5 Flash for image generation.
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${encodeURIComponent(apiKey)}`;
+    // Use the latest Gemini 2.5 Flash Image model for image generation.
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${encodeURIComponent(apiKey)}`;
     const req: any = {
       // Enhanced prompt to ensure proper coloring book format from an input image.
       contents: [
