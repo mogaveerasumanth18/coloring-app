@@ -42,40 +42,7 @@ import { TouchSlider } from './TouchSlider';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-// Debug Toast Component - persists until manually dismissed
-const DebugToast = ({ messages, visible, onHide, onClear }: {
-  messages: string[];
-  visible: boolean;
-  onHide: () => void;
-  onClear: () => void;
-}) => {
-  if (!visible || messages.length === 0) return null;
 
-  return (
-    <View style={styles.debugToastContainer}>
-      <View style={styles.debugToast}>
-        <View style={styles.debugToastHeader}>
-          <Text style={styles.debugToastTitle}>🐛 Debug Log</Text>
-          <View style={styles.debugToastActions}>
-            <TouchableOpacity onPress={onClear} style={styles.debugToastButton}>
-              <Text style={styles.debugToastButtonText}>Clear</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onHide} style={styles.debugToastButton}>
-              <Text style={styles.debugToastButtonText}>Hide</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        <ScrollView style={styles.debugToastMessages} showsVerticalScrollIndicator={true}>
-          {messages.map((message, index) => (
-            <Text key={index} style={styles.debugToastMessage}>
-              {message}
-            </Text>
-          ))}
-        </ScrollView>
-      </View>
-    </View>
-  );
-};
 // UI sizing constants for responsive palette/slider
 const MODAL_SIDE_PADDING = 16;
 const SWATCH_GAP = 12;
@@ -170,24 +137,7 @@ export default function IntegratedColoringBookApp({
   const panGestureRef = useRef<any>(null);
   const pinchGestureRef = useRef<any>(null);
 
-  // Debug toast for persistent debugging
-  const [debugMessages, setDebugMessages] = useState<string[]>([]);
-  const [showDebugToast, setShowDebugToast] = useState<boolean>(false);
 
-  const addDebugMessage = (message: string) => {
-    const timestamp = new Date().toLocaleTimeString();
-    const timestampedMessage = `[${timestamp}] ${message}`;
-    setDebugMessages(prev => [...prev, timestampedMessage]);
-    setShowDebugToast(true);
-  };
-
-  const clearDebugMessages = () => {
-    setDebugMessages([]);
-  };
-
-  const hideDebugToast = () => {
-    setShowDebugToast(false);
-  };
 
   // Native gesture for slider
   const sliderNativeGesture = Gesture.Native();
@@ -564,17 +514,12 @@ export default function IntegratedColoringBookApp({
     fileName: string
   ) => {
     if (!bitmapUri || bitmapUri === 'null' || bitmapUri === 'undefined') {
-      addDebugMessage('❌ Invalid template URI');
       Alert.alert(
         'Error',
         'Invalid template selected. Please try another template.'
       );
       return;
     }
-
-    const uriType = bitmapUri.startsWith('data:') ? 'data URL' : 'file URI';
-    const uriLength = bitmapUri.length;
-    addDebugMessage(`🎯 Template selected: ${fileName} (${uriType}, ${uriLength} chars)`);
 
     setCurrentTemplate({
       svgData: null,
@@ -663,7 +608,6 @@ export default function IntegratedColoringBookApp({
                     height={(screenWidth - 32) * 0.8}
                     interactionEnabled={selectedTool !== 'move' && !showColorTray}
                     initialDataUrl={canvasSnapshot ?? undefined}
-                    onDebug={addDebugMessage}
                   />
                 </Animated.View>
               </GestureDetector>
@@ -865,7 +809,6 @@ export default function IntegratedColoringBookApp({
                 templateData.fileName
               );
           }}
-          onDebug={addDebugMessage}
         />
       </View>
     </ScrollView>
@@ -905,13 +848,7 @@ export default function IntegratedColoringBookApp({
         initialCanvasData={canvasSnapshot || undefined}
       />
 
-      {/* Debug Toast */}
-      <DebugToast
-        messages={debugMessages}
-        visible={showDebugToast}
-        onHide={hideDebugToast}
-        onClear={clearDebugMessages}
-      />
+
 
       {/* Color tray modal */}
       {showColorTray && (
@@ -2179,68 +2116,6 @@ const styles = StyleSheet.create({
   compactSlider: {
     width: '100%',
     height: 30
-  },
-
-  // Debug Toast styles
-  debugToastContainer: {
-    position: 'absolute',
-    top: 80,
-    left: 10,
-    right: 10,
-    zIndex: 9999,
-    maxHeight: '60%',
-  },
-  debugToast: {
-    backgroundColor: 'rgba(0, 0, 0, 0.95)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#333',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  debugToastHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
-  },
-  debugToastTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  debugToastActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  debugToastButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#444',
-    borderRadius: 6,
-  },
-  debugToastButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  debugToastMessages: {
-    maxHeight: 300,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  debugToastMessage: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    marginBottom: 4,
-    lineHeight: 16,
   },
 
 });

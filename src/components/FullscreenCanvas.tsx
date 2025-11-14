@@ -164,10 +164,7 @@ const CustomColorPicker = ({
       }} pointerEvents="box-none">
         <ColorPicker
           color={selectedColor}
-          onColorChange={(color: string) => {
-            console.log('Color picker value changed:', color);
-            onColorChange(color);
-          }}
+          onColorChange={onColorChange}
           thumbSize={30}
           sliderSize={0}
           noSnap={true}
@@ -406,16 +403,6 @@ export default function FullscreenCanvas({
     setCurrentBrushSize(brushSize);
   }, [brushSize]);
 
-  // Log current state for debugging
-  useEffect(() => {
-    console.log('Fullscreen Canvas State:', {
-      currentTool,
-      currentColor,
-      currentBrushSize,
-      templateUri: templateUri ? 'present' : 'none'
-    });
-  }, [currentTool, currentColor, currentBrushSize, templateUri]);
-
 
   // Ensure native canvas updates brush width instantly even if it caches the value internally
   useEffect(() => {
@@ -592,10 +579,7 @@ export default function FullscreenCanvas({
                   styles.toolButtonLeft,
                   currentTool === 'brush' && styles.toolButtonLeftActive
                 ]}
-                onPress={() => {
-                  console.log('Paint tool selected');
-                  setCurrentTool('brush');
-                }}
+                onPress={() => setCurrentTool('brush')}
               >
                 <Feather name="edit-3" size={20} color="#ffffff" />
                 <Text style={styles.toolButtonText}>Paint</Text>
@@ -607,10 +591,7 @@ export default function FullscreenCanvas({
                   styles.toolButtonLeft,
                   currentTool === 'bucket' && styles.toolButtonLeftActive
                 ]}
-                onPress={() => {
-                  console.log('Fill tool selected');
-                  setCurrentTool('bucket');
-                }}
+                onPress={() => setCurrentTool('bucket')}
               >
                 <Feather name="droplet" size={20} color="#ffffff" />
                 <Text style={styles.toolButtonText}>Fill</Text>
@@ -622,10 +603,7 @@ export default function FullscreenCanvas({
                   styles.toolButtonLeft,
                   currentTool === 'eraser' && styles.toolButtonLeftActive
                 ]}
-                onPress={() => {
-                  console.log('Eraser tool selected');
-                  setCurrentTool('eraser');
-                }}
+                onPress={() => setCurrentTool('eraser')}
               >
                 <Feather name="square" size={20} color="#ffffff" />
                 <Text style={styles.toolButtonText}>Eraser</Text>
@@ -638,10 +616,7 @@ export default function FullscreenCanvas({
                   currentTool === 'move' && styles.toolButtonLeftActive,
                   currentTool === 'move' && styles.toolButtonLeftExpanded
                 ]}
-                onPress={() => {
-                  console.log('Move tool selected');
-                  setCurrentTool('move');
-                }}
+                onPress={() => setCurrentTool('move')}
               >
                 <Feather name="move" size={20} color="#ffffff" />
                 <View style={styles.toolButtonTextContainer}>
@@ -657,10 +632,7 @@ export default function FullscreenCanvas({
               {/* Color Tool - Opens color picker */}
               <TouchableOpacity
                 style={styles.toolButtonLeft}
-                onPress={() => {
-                  console.log('Opening color picker');
-                  setShowColorPicker(true);
-                }}
+                onPress={() => setShowColorPicker(true)}
               >
                 <Feather name="aperture" size={20} color="#ffffff" />
                 <Text style={styles.toolButtonText}>Color</Text>
@@ -674,10 +646,7 @@ export default function FullscreenCanvas({
                     <Text style={styles.compactPreviewLabel}>Color:</Text>
                     <TouchableOpacity
                       style={[styles.compactColorPreview, { backgroundColor: currentColor }]}
-                      onPress={() => {
-                        console.log('Color preview tapped, opening picker');
-                        setShowColorPicker(true);
-                      }}
+                      onPress={() => setShowColorPicker(true)}
                     />
                   </View>
 
@@ -686,10 +655,7 @@ export default function FullscreenCanvas({
                     <Text style={styles.compactPreviewLabel}>Size:</Text>
                     <TouchableOpacity
                       style={styles.compactSizePreview}
-                      onPress={() => {
-                        console.log('Size preview tapped, opening picker');
-                        setShowSizePicker(true);
-                      }}
+                      onPress={() => setShowSizePicker(true)}
                     >
                       <View
                         style={[
@@ -907,11 +873,7 @@ export default function FullscreenCanvas({
                           { backgroundColor: color },
                           currentColor === color && styles.selectedColorOption,
                         ]}
-                        onPress={() => {
-                          console.log('Color selected:', color);
-                          setCurrentColor(color);
-                          // Don't close modal on preset color selection - let user pick more if they want
-                        }}
+                        onPress={() => setCurrentColor(color)}
                       />
                     ))}
                   </View>
@@ -920,11 +882,7 @@ export default function FullscreenCanvas({
                   <View style={styles.customColorPickerContainer}>
                     <CustomColorPicker
                       selectedColor={currentColor}
-                      onColorChange={(color) => {
-                        console.log('Custom color selected:', color);
-                        setCurrentColor(color);
-                        // Don't close modal on wheel interaction - let user fine-tune
-                      }}
+                      onColorChange={setCurrentColor}
                     />
                   </View>
                 </ScrollView>

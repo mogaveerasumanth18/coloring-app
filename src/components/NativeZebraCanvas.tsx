@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   View,
+  View,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as FileSystem from 'expo-file-system';
@@ -33,8 +34,6 @@ interface NativeZebraCanvasProps {
   interactionEnabled?: boolean;
   // Optional: when provided on first mount, restore canvas from this PNG data URL instead of template
   initialDataUrl?: string;
-  // Debug function to show toast messages
-  onDebug?: (message: string) => void;
 }
 
 interface ColoringBitmap {
@@ -104,7 +103,6 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   onColoringComplete,
   interactionEnabled = true,
   initialDataUrl,
-  onDebug,
 }, ref) => {
   const [bitmap, setBitmap] = useState<ColoringBitmap | null>(null);
   const [originalTemplate, setOriginalTemplate] = useState<ColoringBitmap | null>(null);
@@ -165,14 +163,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
   const updateDataUrl = useCallback(async (currentBitmap: ColoringBitmap): Promise<void> => {
     try {
-      // Check first few pixels before encoding
-      if (currentBitmap.data.length >= 12) {
-        const r = currentBitmap.data[0], g = currentBitmap.data[1], b = currentBitmap.data[2];
-        const isYellow = r > 200 && g > 200 && b < 100;
-        if (isYellow) {
-          onDebug?.(`🟡 WARNING: Encoding yellow pixel! RGB(${r},${g},${b})`);
-        }
-      }
+
 
       // Validate bitmap data before encoding
       if (!currentBitmap.data || currentBitmap.data.length === 0) {
@@ -189,7 +180,6 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
       // Check if dimensions were modified and update bitmap if needed
       if (width !== currentBitmap.width || height !== currentBitmap.height) {
-        onDebug?.(`🔧 Correcting bitmap dimensions from ${currentBitmap.width}x${currentBitmap.height} to ${width}x${height}`);
         currentBitmap = { ...currentBitmap, width, height };
       }
 
@@ -236,17 +226,14 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       const uri = `data:image/png;base64,${base64Png}`;
       setDataUrl((prev) => (prev === uri ? prev : uri));
 
-      onDebug?.(`✅ Data URL generated (${uri.length} chars)`);
       if (onCompleteRef.current) onCompleteRef.current(uri);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      onDebug?.(`❌ Data URL failed: ${errorMessage}`);
       console.error('Failed to update data URL:', error);
       // Fallback: simple 1x1 white PNG
       const transparentPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
       setDataUrl(`data:image/png;base64,${transparentPng}`);
     }
-  }, [onDebug]);
+  }, []);
 
   // Expose undo/redo/clear methods via ref
   useImperativeHandle(ref, () => ({
@@ -297,12 +284,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
   const loadTemplate = useCallback(async () => {
     const sourceUri = initialDataUrl || templateUri;
     if (!sourceUri) {
-      onDebug?.('⚠️ No source URI provided');
       return;
     }
-
-    const uriType = sourceUri.startsWith('data:') ? 'data URL' : 'file URI';
-    onDebug?.(`🔄 Loading ${uriType} (${sourceUri.length} chars)`);
 
     try {
       let imageData: Uint8Array;
@@ -311,7 +294,6 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
 
       if (sourceUri.startsWith('data:')) {
         // Handle data URL
-        onDebug?.('📄 Processing data URL...');
         const base64Data = sourceUri.split(',')[1];
         if (!base64Data) {
           throw new Error('Invalid data URL format');
@@ -342,8 +324,6 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
           bytes[i] = binaryString.charCodeAt(i);
         }
 
-        onDebug?.(`🔍 Decoding PNG (${bytes.length} bytes)`);
-
         // Validate buffer size before UPNG decode
         if (bytes.buffer.byteLength === 0) {
           throw new Error('Empty buffer for PNG decode');
@@ -368,57 +348,8 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         imageData = new Uint8Array(rgbaFrames[0]);
         imgWidth = decoded.width;
         imgHeight = decoded.height;
-
-        onDebug?.(`📐 Decoded: ${imgWidth}x${imgHeight}`);
-
-        // Check first few pixels for debugging
-        if (imageData.length >= 12) {
-          const r = imageData[0], g = imageData[1], b = imageData[2];
-          const isYellow = r > 200 && g > 200 && b < 100;
-          const isWhite = r > 240 && g > 240 && b > 240;
-          const isBlack = r < 50 && g < 50 && b < 50;
-
-          if (isYellow) {
-            onDebug?.(`🟡 WARNING: First pixel is yellow! RGB(${r},${g},${b})`);
-          } else if (isWhite) {
-            onDebug?.(`⚪ First pixel is white: RGB(${r},${g},${b}) ✓`);
-          } else if (isBlack) {
-            onDebug?.(`⚫ First pixel is black: RGB(${r},${g},${b}) ✓`);
-          } else {
-            onDebug?.(`🎨 First pixel: RGB(${r},${g},${b})`);
-          }
-
-          // Check if this looks like a proper coloring book template
-          let whitePixels = 0;
-          let blackPixels = 0;
-          let otherPixels = 0;
-
-          // Sample first 100 pixels
-          for (let i = 0; i < Math.min(400, imageData.length); i += 4) {
-            const pr = imageData[i], pg = imageData[i + 1], pb = imageData[i + 2];
-            if (pr > 240 && pg > 240 && pb > 240) {
-              whitePixels++;
-            } else if (pr < 50 && pg < 50 && pb < 50) {
-              blackPixels++;
-            } else {
-              otherPixels++;
-            }
-          }
-
-          const total = whitePixels + blackPixels + otherPixels;
-          const whitePercent = Math.round((whitePixels / total) * 100);
-          const blackPercent = Math.round((blackPixels / total) * 100);
-          const otherPercent = Math.round((otherPixels / total) * 100);
-
-          onDebug?.(`📊 Pixel analysis: ${whitePercent}% white, ${blackPercent}% black, ${otherPercent}% other`);
-
-          if (otherPercent > 20) {
-            onDebug?.(`⚠️ WARNING: Too many colored pixels (${otherPercent}%), may not work well for coloring`);
-          }
-        }
       } else {
         // Handle file URI
-        onDebug?.('📁 Processing file URI...');
         const base64Data = await FileSystem.readAsStringAsync(sourceUri, {
           encoding: FileSystem.EncodingType.Base64,
         });
@@ -472,16 +403,12 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
         imageData = new Uint8Array(rgbaFrames[0]);
         imgWidth = decoded.width;
         imgHeight = decoded.height;
-
-        onDebug?.(`📐 File decoded: ${imgWidth}x${imgHeight}`);
       }
 
       // Fit into view box and downscale pixel data to displayed size to reduce per-pixel work
       const viewBoxW = width || DEFAULT_CANVAS_SIZE;
       const viewBoxH = height || DEFAULT_CANVAS_SIZE;
       const fitted = fitIntoBox(imgWidth, imgHeight, viewBoxW, viewBoxH);
-
-      onDebug?.(`📏 Fitted to: ${fitted.width}x${fitted.height}`);
 
       // Ensure dimensions are integers
       const finalWidth = Math.round(fitted.width);
@@ -502,7 +429,6 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       visitedRef.current = new Uint8Array(newBitmap.width * newBitmap.height);
       filledMaskRef.current = new Uint8Array(newBitmap.width * newBitmap.height);
 
-      onDebug?.('🔄 Generating data URL...');
       await updateDataUrl(newBitmap);
 
       // Save initial state to history
@@ -510,17 +436,13 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
       setHistoryIndex(0);
 
       setIsInitialized(true);
-      onDebug?.('✅ Template loaded successfully!');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      onDebug?.(`❌ Load failed: ${errorMessage}`);
       console.error('❌ Failed to load template:', error);
       await createFallbackTemplate();
     }
-  }, [templateUri, initialDataUrl, width, height, updateDataUrl, cloneBitmap, onDebug]);
+  }, [templateUri, initialDataUrl, width, height, updateDataUrl, cloneBitmap]);
 
   const createFallbackTemplate = useCallback(async () => {
-    onDebug?.('🔧 Creating fallback template...');
     const viewBoxW = width || DEFAULT_CANVAS_SIZE;
     const viewBoxH = height || DEFAULT_CANVAS_SIZE;
     // Generate a square fallback bitmap but fit its display into the requested box
@@ -579,8 +501,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
     setHistoryIndex(0);
 
     setIsInitialized(true);
-    onDebug?.('✅ Fallback template created');
-  }, [width, height, updateDataUrl, cloneBitmap, onDebug]);
+  }, [width, height, updateDataUrl, cloneBitmap]);
 
   const performFloodFill = useCallback(
     async (touchX: number, touchY: number) => {
@@ -1037,18 +958,7 @@ export const NativeZebraCanvas = React.forwardRef<any, NativeZebraCanvasProps>((
             }}
             resizeMode="contain"
             transition={0}
-            onLoadStart={() => {
-              onDebug?.('🖼️ Image loading started...');
-            }}
-            onLoad={() => {
-              onDebug?.('🖼️ Image loaded successfully!');
-            }}
-            onError={(error) => {
-              const errorMsg = (error as any)?.nativeEvent?.error || 'Unknown error';
-              onDebug?.(`🖼️ Image load error: ${errorMsg}`);
-            }}
             onLoadEnd={() => {
-              onDebug?.('🖼️ Image load ended');
               if (waitingForImageLoadRef.current) {
                 // Smooth fade out of stroke preview to avoid flash
                 setTimeout(() => {
