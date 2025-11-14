@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Text,
   View,
-  View,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as FileSystem from 'expo-file-system';
